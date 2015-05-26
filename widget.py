@@ -222,7 +222,7 @@ class gui():
     def plot_time_varying_1D(self,var_name, plot_key):
         #var_name = 'amplitude'
         #plot_key = 'amp'
-        print 'in plot_time_varying_1D ', var_name, plot_key
+        #print 'in plot_time_varying_1D ', var_name, plot_key
         rel_axes = self.plot_dict[plot_key]['axes']
         if self.startup:
             self.plot_dict[plot_key]['lines'] = []
@@ -338,14 +338,14 @@ class gui():
     def create_status_string(self,):
         tmp_str = ','.join(['{}:{:.2f}'.format(ch,tmp_time) for tmp_time, ch in zip(self.time_values,self.plot_channels)])
         self.status_label.set_label(tmp_str)
-        print 'tmp_str', tmp_str
+        #print 'tmp_str', tmp_str
 
     def calc_closest_times(self,):
         self.time_values = []; self.locs = []
         for i,id in enumerate(self.plot_channels):
             loc = np.argmin(np.abs(self.netcdf_dict[id].variables['time'].data - self.x_val))
             self.locs.append(np.argmin(np.abs(self.netcdf_dict[id].variables['time'].data - self.x_val)))
-            print self.x_val, loc, self.netcdf_dict[id].variables['intensity'].data.shape
+            #print self.x_val, loc, self.netcdf_dict[id].variables['intensity'].data.shape
             self.time_values.append(self.netcdf_dict[id].variables['time'].data[loc])
 
     def plot_spectra(self,):
