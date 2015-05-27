@@ -85,6 +85,44 @@ cerfit_fit_chords.bash [shot] "v07 v24 v08 v09 v10 v11 v12 v14 v16" "tssub_330rt
 import os, time
 import multiprocessing
 
+def read_subtract_file(fname):
+    with file(fname,'r') as filehandle: in_lines = filehandle.readlines()
+    data = []
+    for i in range(len(in_lines)):
+        cur_line = in_lines[i]
+        if cur_line.find('time')==0:
+            cur_line_plus = in_lines[i+1]
+            data.append([cur_line.split('=')[-1].rstrip('\n'), cur_line_plus.split('=')[-1].rstrip('\n')])
+    return data
+
+
+def assemble_subtracts(sub_list, fname = False):
+    out_txt = ''.join(['time={}\ntssub={}\ngo\n\n'.format(i[0],i[1]) for i in sub_list])
+    if fname != False:
+        with file(fname,'w') as filehandle:
+            filehandle.write(out_txt)
+    return out_txt
+
+
+def remove_times(sub_data, chord):
+    new_sub_data = []
+    for i in range(len(sub_data)):
+        if sub_data[i][0] not in kill_times[chord]: 
+            new_sub_data.append(sub_data[i])
+        else:
+            print 'removing', chord, sub_data[i]
+    return new_sub_data
+
+def mod_times(sub_data, chord):
+    new_sub_data = []
+    for i in range(len(sub_data)):
+        if sub_data[i][0] not in modify_times[chord]['times']: 
+            new_sub_data.append(sub_data[i])
+        else:
+            new_sub_data.append([sub_data[i][0],modify_times[chord]['subs']])
+            print 'modifying chord {}, old: {}, new: {}'.format(chord, sub_data[i],new_sub_data[-1])
+    return new_sub_data
+
 def make_input_file(chords, tssubs, beams, output_fname, show_plot=True):
     #show_plot_txt = 'X11' if show_plot==True else 'NONE'
     if show_plot==True: 
@@ -97,15 +135,19 @@ def make_input_file(chords, tssubs, beams, output_fname, show_plot=True):
         with file('orig_inputs/in_{}.dat'.format(chord),'r') as filehandle:
             config = filehandle.read()
         #with file('tssub_{}.dat'.format(beam),'r') as filehandle:
-        with file(tssub,'r') as filehandle:
-            in_lines = filehandle.read()
-        in_lines = in_lines.replace('exit','')
-        if chord in extra_cmds:
-            extra_txt=extra_cmds[chord]
-        else:
-            extra_txt=''
-
-        new_line='\n{}\n\nchord={},shot={},beam={},tplot={},{}\n\nwrite in_{}.dat\n\n{}'.format(config, chord, shot, beam, show_plot_txt, extra_txt, chord, in_lines)
+        sub_data = read_subtract_file(tssub)
+        #with file(tssub,'r') as filehandle:
+        #    in_lines = filehandle.read()
+        tmp_name = '{}_{}.dat'.format(tssub.split('.')[0], chord)
+        #sub_lines = assemble_subtracts(sub_data, fname = tmp_name)
+        sub_data = remove_times(sub_data, chord)
+        sub_data = mod_times(sub_data, chord)
+        sub_lines = assemble_subtracts(sub_data, fname = tmp_name)
+        #with file(tmp_name,'w') as filehandle:
+        #    filehandle.writelines(in_lines)
+        #in_lines = in_lines.replace('exit','')
+        extra_txt=extra_cmds[chord] if chord in extra_cmds else ''
+        new_line='\n{}\n\nchord={},shot={},beam={},tplot={},{}\n\nwrite in_{}.dat\n\n{}'.format(config, chord, shot, beam, show_plot_txt, extra_txt, chord, sub_lines)
         input_file += new_line
     with file(output_fname,'w') as filehandle:
         filehandle.write(input_file)
@@ -186,7 +228,7 @@ def run_cerfit(output_fname, chords, tssubs, beams,):
     print '======='
     cmd = '''cerfit {} >{}.log'''.format(output_fname, output_fname)
     start_time = time.time()
-    print cmd;os.system(cmd)
+    #print cmd;os.system(cmd)
     print time.time() - start_time
     #Go back to the original directory
 
@@ -208,37 +250,122 @@ def run_cerfit_wrapper(input_data):
     run_cerfit(*input_data)
     #output_fname, chords, tssubs, beams, output_fname = input_data
 
-
-extra_cmds = {'t06':'lowerc 190\n',
-              't07':'location 2=280, npeak 2,temp 2=0, trange 2=0.2,freeze 2=F\n',
-              't08':'location 2=260, npeak 2,temp 2=0, trange 2=0.2,freeze 2=F\n',
-              't09':'location 2=300, npeak 2,temp 2=0, trange 2=0.2,freeze 2=F\n',
-              't10':'location 2=290, npeak 2,temp 2=0, trange 2=0.2,freeze 2=F\n',
-              't11':'location 2=300, npeak 2,temp 2=0, trange 2=0.2,freeze 2=F\n',
-              't12':'location 2=290, npeak 2,temp 2=0, trange 2=0.2,freeze 2=F\n',
-              't13':'location 2=290, npeak 2,temp 2=0, trange 2=0.2,freeze 2=F\n',
-              't15':'location 2=290, npeak 2,temp 2=0, trange 2=0.2,freeze 2=F\n',
-              't16':'location 2=290, npeak 2,temp 2=0, trange 2=0.2,freeze 2=F\n',}
-
 shot = 160409
 cerfit_dir =  '/u/haskeysr/cerfit/{}/'.format(shot)
 cur_dir = os.getcwd()
 
-try:
-    with file('{}/extra_cmds.txt'.format(cerfit_dir), 'r') as filehandle:
-        lines = filehandle.readlines()
-except:
-    lines = []
-print lines
-exra_cmds = {}
-for i in lines:
-    if len(i)>=3:
-        i = i.split(':')
-        print i
-        lab = i[0].strip(' ')
-        val = i[1].strip(' ').replace('\n','').strip(' ').strip(',')
+def read_in_npeaks(chords):
+    npeaks = {}
+    for chord in chords:
+        fname = 'orig_inputs/in_{}.dat'.format(chord)
+        with file(fname,'r') as filehandle: lines = filehandle.readlines()
+        for i in lines:
+            if i.find('NPEAK')>=0:
+                npeaks[chord] = int(i.split('=')[1].rstrip('\n').strip(' '))
+    return npeaks
+
+def parse_line(line):
+    line = line.split(':')
+    print line
+    if i[0]=='cold_line':
+        chrd = i[1].strip(' ')
+        loc = i[2].strip(' ')
+        npeaks[chrd]= npeaks[chrd]+1
+        cmd = 'location {npeak}={loc},npeak {npeak}, temp {npeak}=0, trange {npeak} = 0.2, freeze {npeak}=F'.format(npeak=npeaks[chrd], loc=loc)
+    if i[0]=='command':
+        chrd = i[1].strip(' ')
+        cmd = i[2]
+    if i[0]=='kill':
+        pass
+    if i[0]=='modify':
+        pass
+    #lab = i[0].strip(' ')
+    #val = i[1].strip(' ').replace('\n','').strip(' ').strip(',')
+    if lab not in extra_cmds.keys():
         extra_cmds[lab] = val
-for i in extra_cmds.keys():print i,extra_cmds[i]
+    else:
+        extra_cmds[lab] += ',{}'.format(cmd)
+        print extra_cmds[lab]
+
+def read_extra_cmds():
+    try:
+        with file('{}/extra_cmds2.txt'.format(cerfit_dir), 'r') as filehandle:
+            lines = filehandle.readlines()
+    except:
+        lines = []
+    print lines
+    extra_cmds = {}
+    for i in lines:
+        if len(i)>=3:
+            parse_line(i)
+            i = i.split(':')
+            print i
+            lab = i[0].strip(' ')
+            val = i[1].strip(' ').replace('\n','').strip(' ').strip(',')
+            extra_cmds[lab] = val
+    for i in extra_cmds.keys():print i,extra_cmds[i]
+    kill_times = {}
+    modify_times = {}
+    for i in chords: 
+        kill_times[i] = []
+        modify_times[i] = {'times':[],'subs':[]}
+
+    return extra_cmds, kill_times, modify_times
+
+def read_extra_cmds2():
+    try:
+        with file('{}/extra_cmds2.txt'.format(cerfit_dir), 'r') as filehandle:
+            lines = filehandle.readlines()
+    except:
+        lines = []
+    print lines
+    extra_cmds = {}
+    kill_times = {}
+    modify_times = {}
+    for i in chords: 
+        kill_times[i] = []
+        modify_times[i] = {'times':[],'subs':[]}
+    for i in lines:
+        if len(i)>=3:
+            i = i.split(':')
+            i[0] = i[0].strip(' ')
+            print i
+            if i[0]=='cold_line':
+                chrd = i[1].strip(' ')
+                loc = i[2].rstrip('\n').strip(' ')
+                if chrd in npeaks.keys():
+                    npeaks[chrd]= npeaks[chrd]+1
+                else:
+                    npeaks[chrd] = 2
+                    
+                print 'cold_line', i, chrd, loc, npeaks
+                cmd = 'location {npeak}={loc},npeak {npeak}, temp {npeak}=0, trange {npeak} = 0.2, freeze {npeak}=F'.format(npeak=npeaks[chrd], loc=loc)
+            if i[0]=='command':
+                chrd = i[1].strip(' ')
+                cmd = i[2].rstrip('\n')
+            if i[0]=='kill':
+                chrds = i[1].strip(' ').split(',')
+                kill_time = i[2].rstrip('\n').strip(' ')
+                for tmp_chrd in chrds:
+                    kill_times[tmp_chrd].append(kill_time)
+            if i[0]=='modify':
+                pass
+            #lab = i[0].strip(' ')
+            #val = i[1].strip(' ').replace('\n','').strip(' ').strip(',')
+            if chrd not in extra_cmds.keys():
+                extra_cmds[chrd] = cmd
+            else:
+                extra_cmds[chrd] += ',{}'.format(cmd)
+            print extra_cmds[chrd]
+            #parse_line(i)
+            #i = i.split(':')
+            #print i
+            #lab = i[0].strip(' ')
+            #val = i[1].strip(' ').replace('\n','').strip(' ').strip(',')
+            #extra_cmds[lab] = val
+    for i in extra_cmds.keys():print i,extra_cmds[i]
+    return extra_cmds, kill_times, modify_times
+
 #This copies all of the standard input files from before fy14
 cmd = 'mkdir {}/orig_inputs/'.format(cerfit_dir)
 print cmd;os.system(cmd)
@@ -249,7 +376,6 @@ print cmd;os.system(cmd)
 #This overwrites any of those other files with data from fy14
 cmd = 'cp -a /u/grierson/cerfit/setup/in/tssub/fy14/in_* {}/orig_inputs/'.format(cerfit_dir)
 print cmd;os.system(cmd)
-
 
 with file('/cerbl/shotstatus/shot_{:04d}.status'.format(shot/100)) as filehandle:
     lines = filehandle.readlines()
@@ -293,18 +419,20 @@ exclude_list = ['t14','t15','t16','v14','v16','v17','v18']
 #This would mean that some chords require special tssub files
 #How to best implement this? Or run everything and chop at the end?
 
-def setup_tssub_links():
-    dest = '{}/{}/30lt/tssub.dat'.format(cerfit_dir,t_30l_ref)
-    if os.path.isfile(dest):os.system('ln -sf {} {}/tssub_t_30lt.dat'.format(dest,cerfit_dir))
+def setup_tssub_links(subtract_name):
+    #subtract_name = 'timesub' if timesumb else 'tssub'
+    dest = '{}/{}/30lt/{}.dat'.format(cerfit_dir,t_30l_ref,subtract_name)
+    if os.path.isfile(dest):os.system('ln -sf {} {}/{}_t_30lt.dat'.format(dest,cerfit_dir, subtract_name))
     dest = '{}/{}/330lt/tssub.dat'.format(cerfit_dir,t_330l_ref)
-    if os.path.isfile(dest):os.system('ln -sf {} {}/tssub_t_330lt.dat'.format(dest,cerfit_dir))
+    if os.path.isfile(dest):os.system('ln -sf {} {}/{}_t_330lt.dat'.format(dest,cerfit_dir, subtract_name))
     dest = '{}/{}/330lt/tssub.dat'.format(cerfit_dir,v_330l_ref)
-    if os.path.isfile(dest):os.system('ln -sf {} {}/tssub_v_330lt.dat'.format(dest,cerfit_dir))
+    if os.path.isfile(dest):os.system('ln -sf {} {}/{}_v_330lt.dat'.format(dest,cerfit_dir, subtract_name))
     #os.system('ln -sf {}/{}/330lt/tssub.dat {}/tssub_t_330lt.dat'.format(cerfit_dir,t_330l_ref,cerfit_dir))
     #os.system('ln -sf {}/{}/330lt/tssub.dat {}/tssub_v_330lt.dat'.format(cerfit_dir,v_330l_ref,cerfit_dir))
 
+subtract_name = 'timesub'
 
-setup_tssub_links()
+setup_tssub_links(subtract_name)
 
 test_run = False
 number_of_proc = 5
@@ -332,14 +460,20 @@ else:
                 
         print chords_tmp
         if len(chords_tmp)>0:
-            tssubs_tmp = ['tssub_{}_{}.dat'.format(i[0], on_beam) for i in chords_tmp]
+            tssubs_tmp = ['{}_{}_{}.dat'.format(subtract_name,i[0], on_beam) for i in chords_tmp]
             beams_tmp = [on_beam for i in chords_tmp]
             chords.extend(chords_tmp)
             tssubs.extend(tssubs_tmp)
             beams.extend(beams_tmp)
 
+npeaks =  read_in_npeaks(chords)
+extra_cmds, kill_times, modify_times = read_extra_cmds2()
+
+#1/0
+
 input_data_list = make_list_of_inputs(chords, tssubs, beams, number_of_proc)
 
+number_of_proc = 1
 if number_of_proc>1:
     p = multiprocessing.Pool(number_of_proc)
     p.map(run_cerfit_wrapper, input_data_list)

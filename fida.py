@@ -430,3 +430,4 @@ for i in range(3):
     print '{}lens = [{}]'.format(axes[i], ','.join(['{:.4f}'.format(j) for j in lens[i]]))
 for i in range(3):
     print '{}los = [{}]'.format(axes[i], ','.join(['{:.4f}'.format(j) for j in loc[i]]))
+
