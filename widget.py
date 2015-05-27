@@ -8,6 +8,13 @@ import matplotlib.pyplot as pt
 HOME = os.environ['HOME']
 shot = 160409
 
+def change_name(ch_name):
+    if ch_name.find('tang')>=0:
+        ch_name = 't{:02d}'.format(int(ch_name[4:]))
+    elif ch_name.find('vert')>=0:
+        ch_name = 'v{:02d}'.format(int(ch_name[4:]))
+    return ch_name
+
 class gui():
     def __init__(self,):
         self.win = gtk.Window()
@@ -47,8 +54,20 @@ class gui():
         self.entry_text.set_editable(False)
         vbox = gtk.VBox()
         self.action_list_label = gtk.Label()
+        self.action_list_button = gtk.Button(label='Write File')
+        self.action_list_button.connect("clicked", self.action_list_button_pressed, "cool button")
         vbox.pack_start(self.action_list_label)
-        self.action_list = []
+        vbox.pack_start(self.action_list_button)
+
+
+        tmp_txt = self.action_list_label.get_label()
+        fname = HOME + '/cerfit/{shot}/extra_cmds2.txt'.format(shot = shot)
+        if os.path.isfile(fname):
+            with file(fname,'r') as filehandle: 
+                self.action_list = [i.rstrip('\n') for i in filehandle.readlines()]
+        else:
+            self.action_list = []
+        self.action_list_label.set_label('\n'.join(self.action_list))
 
         hbox = gtk.HBox(homogeneous = False)
         self.figure_parent.pack_end(entry_hbox, expand = False, fill = False, padding = 0)
@@ -67,6 +86,11 @@ class gui():
 
         self.plot_all_residuals()
         self.win.show_all()
+
+    def action_list_button_pressed(self,*args):
+        tmp_txt = self.action_list_label.get_label()
+        fname = HOME + '/cerfit/{shot}/test.txt'.format(shot = shot)
+        with file(fname,'w') as filehandle: filehandle.write(tmp_txt+'\n')
 
     def get_active_channels(self,*args):
         '''Figures out which channels should be plotted, and which plots should be shown
@@ -110,7 +134,6 @@ class gui():
         print self.plot_channels, self.n_chans
         self.generate_figure_layout()
         self.startup_sequence()
-        #def update_plots(self,*args):
 
     def selection_frame(self,):
         vbox = gtk.VBox()
@@ -314,9 +337,11 @@ class gui():
             for i in self.netcdf_dict.keys():
                 if self.x_val in self.netcdf_dict[i].variables['time']:
                     possible_list.append(i)
+            possible_list = [change_name(ch_name) for ch_name in possible_list]
             print possible_list, len(possible_list)
-            self.action_list.append('kill {} {}'.format(','.join(possible_list), self.x_val))
-            self.action_list_label.set_label('\n'.join(self.action_list))
+            self.entry_text.set_text('kill:{}:{}'.format(','.join(possible_list), self.x_val))
+            self.entry_text.set_editable(True)
+            #self.action_list_label.set_label('\n'.join(self.action_list))
         elif value =='m':
             print 'modify a certain datapoint'
             possible_list = []
@@ -405,6 +430,7 @@ class gui():
                 #self.plot_dict[i]['plot_func']()
         self.f.canvas.flush_events()
 
+
 def onclick(event):
     print 'button',event.button
     if gui1.cold_line_select:
@@ -420,7 +446,8 @@ def onclick(event):
             ch_name = gui1.plot_channels[gui1.plot_dict['spec']['axes'].index(event.inaxes)]
         #self.clickable_axes
         print '####### line : ', line_at, ch_name
-        gui1.action_list.append('cold_line {} {}'.format(ch_name, line_at))
+        ch_name = change_name(ch_name)
+        gui1.action_list.append('cold_line:{}:{}'.format(ch_name, line_at))
         gui1.cold_line_select = False
         gui1.action_list_label.set_label('\n'.join(gui1.action_list))
         gui1.action_status.set_label('')
