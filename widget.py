@@ -467,3 +467,4 @@ def onclick(event):
 gui1 = gui()
 cid = gui1.f.canvas.mpl_connect('button_press_event', onclick)
 gtk.main()
+#sd
