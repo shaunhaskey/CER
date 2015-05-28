@@ -54,9 +54,17 @@ class gui():
         self.entry_text.set_editable(False)
         vbox = gtk.VBox()
         self.action_list_label = gtk.Label()
+        self.action_list_scroll = gtk.ScrolledWindow()
+        self.action_list_scroll.set_border_width(10)
+        self.action_list_scroll.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_ALWAYS)
+
+
         self.action_list_button = gtk.Button(label='Write File')
         self.action_list_button.connect("clicked", self.action_list_button_pressed, "cool button")
-        vbox.pack_start(self.action_list_label)
+
+        self.action_list_scroll.add_with_viewport(self.action_list_label)
+        #vbox.pack_start(self.action_list_label)
+        vbox.pack_start(self.action_list_scroll)
         vbox.pack_start(self.action_list_button)
 
 

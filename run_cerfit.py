@@ -106,7 +106,7 @@ def remove_times(sub_data, chord):
     new_sub_data = []
     kill_times_int = [int(float(i)) for i in  kill_times[chord]]
     print '##############'
-    print kill_times[chord]
+    print kill_times[chord], lower_time, upper_time
     for i in range(len(sub_data)):
         cur_time = int(float(sub_data[i][0]))
         if (cur_time not in kill_times_int) and (cur_time<upper_time) and (cur_time>lower_time):# kill_times[chord]: 
@@ -146,7 +146,7 @@ def make_input_file(chords, tssubs, beams, output_fname, show_plot=True):
         sub_data = mod_times(sub_data, chord)
         sub_lines = assemble_subtracts(sub_data, fname = tmp_name)
         extra_txt=extra_cmds[chord] if chord in extra_cmds else ''
-        new_line='\n{}\n\nchord={},shot={},beam={},tplot={},{}\n\nwrite in_{}.dat\n\n{}'.format(config, chord, shot, beam, show_plot_txt, extra_txt, chord, sub_lines)
+        new_line='\n{}\n\nchord={},shot={},beam={},tplot={}\n{}\n\nwrite in_{}.dat\n\n{}'.format(config, chord, shot, beam, show_plot_txt, extra_txt, chord, sub_lines)
         input_file += new_line
     with file(output_fname,'w') as filehandle:
         filehandle.write(input_file)
@@ -220,6 +220,7 @@ def run_cerfit(output_fname, chords, tssubs, beams,):
     #output_fname = 'tmp2.dat'
     make_input_file(chords, tssubs, beams, output_fname)
     print '======='
+    print lower_time, upper_time
     print chords
     print tssubs
     print beams
@@ -231,7 +232,7 @@ def run_cerfit(output_fname, chords, tssubs, beams,):
     while not os.path.isfile(output_fname):
         time.sleep(1)
     time.sleep(1.5)
-    #print cmd;os.system(cmd)
+    print cmd;os.system(cmd)
     print time.time() - start_time, cmd
     #Go back to the original directory
 
@@ -331,6 +332,8 @@ def read_extra_cmds():
             kill_times['{}{:02d}'.format(prefix,i)] = []
             modify_times['{}{:02d}'.format(prefix,i)] = {'times':[],'subs':[]}
 
+    lower_time = 0
+    upper_time = 10000
     for i in lines:
         if len(i)>=3:
             i = i.split(':')
@@ -345,10 +348,19 @@ def read_extra_cmds():
                     npeaks[chrd] = 2
                     
                 print 'cold_line', i, chrd, loc, npeaks
-                cmd = 'location {npeak}={loc},npeak {npeak}, temp {npeak}=0, trange {npeak} = 0.2, freeze {npeak}=F'.format(npeak=npeaks[chrd], loc=loc)
+                cmd = 'location {npeak}={loc}, temp {npeak}=0\ntrange {npeak} = 0.2, freeze {npeak}=F\n'.format(npeak=npeaks[chrd], loc=loc)
+                if chrd not in extra_cmds.keys():
+                    extra_cmds[chrd] = cmd
+                else:
+                    extra_cmds[chrd] += '{}'.format(cmd)
             if i[0]=='command':
                 chrd = i[1].strip(' ')
                 cmd = i[2].rstrip('\n')
+                cmd += '\n'
+                if chrd not in extra_cmds.keys():
+                    extra_cmds[chrd] = cmd
+                else:
+                    extra_cmds[chrd] += '{}'.format(cmd)
             if i[0]=='kill':
                 chrds = i[1].strip(' ').split(',')
                 kill_time = i[2].rstrip('\n').strip(' ')
@@ -368,25 +380,20 @@ def read_extra_cmds():
                     else:
                         modify_times[tmp_chrd]['times'] = [modify_time]
                         modify_times[tmp_chrd]['subs'] = [new_sub]
-            lower_time = 0
-            upper_time = 10000
             if i[0]=='lower_time':
                 lower_time = int(float(i[1].strip(' ').rstrip('\n')))
             if i[0]=='upper_time':
                 upper_time = int(float(i[1].strip(' ').rstrip('\n')))
             #lab = i[0].strip(' ')
             #val = i[1].strip(' ').replace('\n','').strip(' ').strip(',')
-            if chrd not in extra_cmds.keys():
-                extra_cmds[chrd] = cmd
-            else:
-                extra_cmds[chrd] += ',{}'.format(cmd)
-            print extra_cmds[chrd]
+            #print extra_cmds[chrd]
             #parse_line(i)
             #i = i.split(':')
             #print i
             #lab = i[0].strip(' ')
             #val = i[1].strip(' ').replace('\n','').strip(' ').strip(',')
             #extra_cmds[lab] = val
+    for i in extra_cmds.keys():extra_cmds[i] += 'npeak {}\n'.format(npeaks[i])
     for i in extra_cmds.keys():print i,extra_cmds[i]
     return extra_cmds, kill_times, modify_times, lower_time, upper_time
 
@@ -511,7 +518,7 @@ npeaks =  read_in_npeaks(chords)
 
 
 extra_cmds, kill_times, modify_times, lower_time, upper_time = read_extra_cmds()
-
+print "Lower time: {}, upper time: {}".format(lower_time, upper_time)
 #1/0
 
 input_data_list = make_list_of_inputs(chords, tssubs, beams, number_of_proc)
