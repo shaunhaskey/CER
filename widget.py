@@ -89,7 +89,7 @@ class gui():
 
     def action_list_button_pressed(self,*args):
         tmp_txt = self.action_list_label.get_label()
-        fname = HOME + '/cerfit/{shot}/test.txt'.format(shot = shot)
+        fname = HOME + '/cerfit/{shot}/extra_cmds2.txt'.format(shot = shot)
         with file(fname,'w') as filehandle: filehandle.write(tmp_txt+'\n')
 
     def get_active_channels(self,*args):
@@ -339,7 +339,7 @@ class gui():
                     possible_list.append(i)
             possible_list = [change_name(ch_name) for ch_name in possible_list]
             print possible_list, len(possible_list)
-            self.entry_text.set_text('kill:{}:{}'.format(','.join(possible_list), self.x_val))
+            self.entry_text.set_text('kill:{}:{:.3f}'.format(','.join(possible_list), self.x_val))
             self.entry_text.set_editable(True)
             #self.action_list_label.set_label('\n'.join(self.action_list))
         elif value =='m':
@@ -348,14 +348,21 @@ class gui():
             for i in self.netcdf_dict.keys():
                 if self.x_val in self.netcdf_dict[i].variables['time']:
                     possible_list.append(i)
+            possible_list = [change_name(ch_name) for ch_name in possible_list]
             print possible_list, len(possible_list)
-            self.entry_text.set_text('modify {} {}'.format(','.join(possible_list), self.x_val))
+            self.entry_text.set_text('modify:{}:{},{}'.format(','.join(possible_list), self.x_val,'VAL'))
             self.entry_text.set_editable(True)
+        elif value =='d':
+            self.entry_text.set_text('remove:'.format(','.join(possible_list), self.x_val))
+            self.entry_text.set_editable(True)
+        
         #self.x_val += self.netcdf_dict[tmp_key].variables['intensity'].data.shape[tmp_key]/2
 
     def entry_button_pressed(self,*args):
-        self.action_list.append(self.entry_text.get_text())
-        self.action_list_label.set_label('\n'.join(self.action_list))
+        txt = self.entry_text.get_text()
+        if len(txt)>=1:
+            self.action_list.append(self.entry_text.get_text())
+            self.action_list_label.set_label('\n'.join(self.action_list))
         self.entry_text.set_text('')
         self.entry_text.set_editable(False)
 
@@ -424,11 +431,20 @@ class gui():
 
     def clicked(self,):
         self.calc_closest_times()
+        cur_xlim = self.plot_dict['temp']['axes'][0].get_xlim()
         for i in self.plot_dict.keys():
             if self.plot_dict[i]['plot']>=0 and self.plot_dict[i]['refresh']:
                 self.plot_dict[i]['plot_func'](*self.plot_dict[i]['args'])
                 #self.plot_dict[i]['plot_func']()
         self.f.canvas.flush_events()
+        if (self.x_val>np.max(cur_xlim)) or (self.x_val<np.min(cur_xlim)):
+            xlim_range = cur_xlim[1] - cur_xlim[0]
+            print 'changing x lim'
+            if self.x_val>np.max(cur_xlim):
+                self.plot_dict['temp']['axes'][0].set_xlim([cur_xlim[0]+xlim_range*0.9,cur_xlim[1]+xlim_range*0.9])
+            if self.x_val<np.min(cur_xlim):
+                self.plot_dict['temp']['axes'][0].set_xlim([cur_xlim[0]-xlim_range*0.9,cur_xlim[1]-xlim_range*0.9])
+            self.f.canvas.draw()
 
 
 def onclick(event):
