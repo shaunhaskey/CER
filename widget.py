@@ -394,7 +394,8 @@ class gui():
                 fit_dat = self.netcdf_dict[id].variables['fit'].data[loc,:]
                 max_val = np.max(fit_dat)*1.2
                 min_val = -np.max(fit_dat)*0.1
-                self.plot_dict['spec']['line1'].append(rel_axes[i].plot(self.netcdf_dict[id].variables['intensity'].data[loc,:],linestyle='-',color='b')[0])
+                #self.plot_dict['spec']['line1'].append(rel_axes[i].plot(self.netcdf_dict[id].variables['intensity'].data[loc,:],linestyle='-',color='b')[0])
+                self.plot_dict['spec']['line1'].append(rel_axes[i].plot(self.netcdf_dict[id].variables['intensity'].data[loc,:],'b.')[0])
                 self.plot_dict['spec']['line2'].append(rel_axes[i].plot(fit_dat,linestyle='--',color='k')[0])
                 self.plot_dict['spec']['vlines'].append(rel_axes[i].axvline(xdata))
                 rel_axes[i].set_title(id)
@@ -420,7 +421,7 @@ class gui():
             print self.x_val, loc, self.netcdf_dict[id].variables['intensity'].data.shape
             data = self.netcdf_dict[id].variables['intensity'].data[loc,:] - self.netcdf_dict[id].variables['fit'].data[loc,:]
             if self.startup:
-                self.plot_dict['resid_dot']['dots'].append(rel_axes[i].plot(data,'o')[0])
+                self.plot_dict['resid_dot']['dots'].append(rel_axes[i].plot(data,'.')[0])
                 rel_axes[i].set_ylim([-10,10])
             else:
                 self.plot_dict['resid_dot']['dots'][i].set_ydata(data)
