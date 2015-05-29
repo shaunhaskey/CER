@@ -3,10 +3,14 @@ from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanva
 from matplotlib.backends.backend_gtkagg import NavigationToolbar2GTKAgg as NavigationToolbar
 import datetime, sys,socket, time, gtk, os
 import scipy.io.netcdf as netcdf
+import scipy.interpolate as interp
 import numpy as np
 import matplotlib.pyplot as pt
+import sys
 HOME = os.environ['HOME']
-shot = 160409
+shot = int(sys.argv[1])
+
+#shot = 160409
 
 def change_name(ch_name):
     if ch_name.find('tang')>=0:
@@ -16,7 +20,8 @@ def change_name(ch_name):
     return ch_name
 
 class gui():
-    def __init__(self,):
+    def __init__(self,shot):
+        self.shot = shot
         self.win = gtk.Window()
         self.win.connect("destroy", lambda x: gtk.main_quit())
         self.win.connect("key-press-event",self.on_window_key_press_event)
@@ -32,6 +37,8 @@ class gui():
                           'temp':{'plot':3,'axes':[],'plot_func':self.plot_time_varying_1D, 'refresh':True, 'args':['temperature', 'temp'],'xax':'time'},
                           'vel':{'plot':-1,'axes':[],'plot_func':self.plot_time_varying_1D, 'refresh':True, 'args':['location','vel'],'xax':'time'},
                           'amp':{'plot':-1,'axes':[],'plot_func':self.plot_time_varying_1D, 'refresh':True, 'args':['amplitude','amp'],'xax':'time'}}
+        self.fig_radial, self.canvas_radial, self.vbox_radial, self.toolbar_radial = self.add_matplotlib()
+        self.ax_radial = [self.fig_radial.add_subplot(2,2,i) for i in range(1,5)]
         #Get the available netCDF data 
         self.get_netcdf()
         #Setup the plot selection frame
@@ -69,7 +76,7 @@ class gui():
 
 
         tmp_txt = self.action_list_label.get_label()
-        fname = HOME + '/cerfit/{shot}/extra_cmds2.txt'.format(shot = shot)
+        fname = HOME + '/cerfit/{shot}/extra_cmds2.txt'.format(shot = self.shot)
         if os.path.isfile(fname):
             with file(fname,'r') as filehandle: 
                 self.action_list = [i.rstrip('\n') for i in filehandle.readlines()]
@@ -87,6 +94,7 @@ class gui():
         self.notebook.append_page(hbox)
         self.notebook.append_page(self.resids_parent)
         self.notebook.append_page(vbox)
+        self.notebook.append_page(self.vbox_radial)
 
         #Set an initial time value
         self.x_val = 1000
@@ -97,7 +105,7 @@ class gui():
 
     def action_list_button_pressed(self,*args):
         tmp_txt = self.action_list_label.get_label()
-        fname = HOME + '/cerfit/{shot}/extra_cmds2.txt'.format(shot = shot)
+        fname = HOME + '/cerfit/{shot}/extra_cmds2.txt'.format(shot = self.shot)
         with file(fname,'w') as filehandle: filehandle.write(tmp_txt+'\n')
 
     def get_active_channels(self,*args):
@@ -216,12 +224,12 @@ class gui():
     def get_netcdf(self,):
         self.netcdf_files = []
         self.netcdf_dict = {}
-        dir_loc = HOME + '/cerfit/{shot}'.format(shot = shot)
+        dir_loc = HOME + '/cerfit/{shot}'.format(shot = self.shot)
         dir_list = os.listdir(dir_loc)
         filt_list = []
         chan_list = []; vert_list = []; tang_list = []
         for i in dir_list:
-            file_start = 'd{shot}_'.format(shot = shot)
+            file_start = 'd{shot}_'.format(shot = self.shot)
             if i.find(file_start)==0:
                 print i
                 if i.find('tang')>0:
@@ -230,14 +238,71 @@ class gui():
                     vert_list.append(i.replace(file_start, '',).replace('.nc',''))
                 else:
                     print 'not vert or tang'
+        chan_list_new = []
+        for i in range(100):
+            cur_name = 'tang{}'.format(i)
+            if cur_name in tang_list:
+                chan_list_new.append(cur_name)
+        for i in range(100):
+            cur_name = 'vert{}'.format(i)
+            if cur_name in vert_list:
+                chan_list_new.append(cur_name)
         print tang_list, vert_list, sorted(tang_list), sorted(vert_list)
         chan_list = sorted(tang_list)
         for i in sorted(vert_list): chan_list.append(i) 
         self.avail_chans = chan_list
+        print '##########', len(chan_list), len(chan_list_new)
+        self.avail_chans = chan_list_new
         print 'hello',self.avail_chans
         for i in self.avail_chans:
-            f = netcdf.netcdf_file(dir_loc +  '/d{shot}_{}.nc'.format(i,shot=shot))
+            f = netcdf.netcdf_file(dir_loc +  '/d{shot}_{}.nc'.format(i,shot=self.shot))
             self.netcdf_dict[i] = f
+
+        #Make an overall interpolated time base
+        # self.read_in_cer_files()
+        # self.overall_t = self.netcdf_dict[self.avail_chans[0]].variables['time'].data
+        # for i in self.avail_chans:
+        #     self.overall_t = np.append(self.overall_t, self.netcdf_dict[i].variables['time'].data)
+        # print self.overall_t, self.overall_t.shape
+        # self.overall_t = np.sort(np.unique(self.overall_t))
+        # print '##############'
+        # self.overall_temp_data = np.zeros((len(self.avail_chans),self.overall_t.shape[0]),dtype=float)
+        # for i, chan in enumerate(self.avail_chans):
+        #     tmp = interp.interp1d(self.netcdf_dict[chan].variables['time'].data, self.netcdf_dict[chan].variables['temperature'].data[:,0], bounds_error = False, fill_value = 0.,kind='nearest')
+        #     self.overall_temp_data[i,:] = tmp(self.overall_t)
+        # print self.overall_t, self.overall_temp_data
+        # #fig, ax = pt.subplots()
+        # arg_ord = np.argsort(self.chan_R)
+        # self.t_mesh, self.R_mesh = np.meshgrid(self.overall_t, self.chan_R[arg_ord])
+        # im = self.ax_radial[0].pcolormesh(self.t_mesh, self.R_mesh, self.overall_temp_data[arg_ord,:],cmap = 'spectral')
+        # im.set_clim([0,5])
+        # self.fig_radial.canvas.draw()
+
+    def read_in_cer_files(self,):
+        print 'reading cer files'
+        dir_loc = HOME + '/cerfit/{shot}'.format(shot = self.shot)
+        self.chan_R = []
+        for i in self.avail_chans:
+            num = int(i[4:])
+            if i.find('tang')>=0:
+                letter='t'
+            else:
+                letter = 'v'
+            if num<=7 and letter == 't':
+                append_letter = 'a'
+            if num>=8 and letter == 't':
+                append_letter = 'd'
+            if letter == 'v':
+                append_letter = ''
+            fname = '{dir_loc}/{shot}.8{sys}{num}{ext}'.format(dir_loc = dir_loc, shot = self.shot, sys=letter,num=num,ext=append_letter)
+            print fname
+            with file(fname,'r') as filehandle: lines = filehandle.readlines()
+            find_txt = 'RADIUS ='
+            start = lines[1].find(find_txt)
+            end = lines[1].find('cm')
+            self.chan_R.append(float(lines[1][start+len(find_txt):end]))
+        self.chan_R = np.array(self.chan_R)
+        print self.chan_R
 
     def plot_residuals(self,):
         rel_axes = self.plot_dict['resid']['axes']
@@ -361,9 +426,17 @@ class gui():
             self.entry_text.set_text('modify:{}:{},{}'.format(','.join(possible_list), self.x_val,'VAL'))
             self.entry_text.set_editable(True)
         elif value =='d':
-            self.entry_text.set_text('remove:'.format(','.join(possible_list), self.x_val))
+            self.entry_text.set_text('remove:')
             self.entry_text.set_editable(True)
-        
+        elif value=='h':
+            print 'r: reload'
+            print 'c: add cold line, cold_line:chords:location'
+            print 'k: kill datapoint, kill:chords:time'
+            print 'm: modify datapoint modify:chords:time,new_tss'
+            print 'd: Delete a chord completely remove:chords'
+            print 'lower_time:time'
+            print 'upper_time:time'
+            print 'd: Delete a chord completely remove:chords'
         #self.x_val += self.netcdf_dict[tmp_key].variables['intensity'].data.shape[tmp_key]/2
 
     def entry_button_pressed(self,*args):
@@ -489,7 +562,7 @@ def onclick(event):
         gui1.clicked()
         #elif (event.inaxes in gui1.clickable_axes) and event.button==3:
 
-gui1 = gui()
+gui1 = gui(shot)
 cid = gui1.f.canvas.mpl_connect('button_press_event', onclick)
 gtk.main()
 #sd

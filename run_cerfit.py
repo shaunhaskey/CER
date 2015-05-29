@@ -255,6 +255,7 @@ def run_cerfit_wrapper(input_data):
     #output_fname, chords, tssubs, beams, output_fname = input_data
 
 shot = 160409
+shot = 160414
 cerfit_dir =  '/u/haskeysr/cerfit/{}/'.format(shot)
 cur_dir = os.getcwd()
 
@@ -354,13 +355,15 @@ def read_extra_cmds():
                 else:
                     extra_cmds[chrd] += '{}'.format(cmd)
             if i[0]=='command':
-                chrd = i[1].strip(' ')
+                chrds = i[1].strip(' ').split(',')
+                #chrd = i[1].strip(' ')
                 cmd = i[2].rstrip('\n')
                 cmd += '\n'
-                if chrd not in extra_cmds.keys():
-                    extra_cmds[chrd] = cmd
-                else:
-                    extra_cmds[chrd] += '{}'.format(cmd)
+                for chrd in chrds:
+                    if chrd not in extra_cmds.keys():
+                        extra_cmds[chrd] = cmd
+                    else:
+                        extra_cmds[chrd] += '{}'.format(cmd)
             if i[0]=='kill':
                 chrds = i[1].strip(' ').split(',')
                 kill_time = i[2].rstrip('\n').strip(' ')
@@ -454,11 +457,29 @@ b.remove('lines')
 for i in b:
     print i, shot_data[shot][i]['TIMI'], shot_data[shot][i]['TIMI']
 
+
+def read_references():
+    with file('references.txt','r') as filehandle: lines = filehandle.readlines()
+    tssub_refs = {}
+    print lines
+    for i in lines:
+        print i,i.find(',')
+        if i.find(',')>=0:
+            print i
+            dat = i.split(',')
+            print dat
+            name = dat[0].strip(' ')
+            val = dat[1].rstrip('\n').strip(' ')
+            print name, val
+            tssub_refs[name] = val
+    return tssub_refs
 os.chdir(cerfit_dir)
+tssub_refs = read_references()
 on_beams = ['30lt', '330lt']
-t_330l_ref = 't08'
-v_330l_ref = 'v04'
-t_30l_ref = 't01'
+#t_330l_ref = 't08'
+#v_330l_ref = 'v04' 160409
+#v_330l_ref = 't08'
+#t_30l_ref = 't01'
 
 
 exclude_list = read_remove_list()
@@ -469,11 +490,11 @@ exclude_list = read_remove_list()
 
 def setup_tssub_links(subtract_name):
     #subtract_name = 'timesub' if timesumb else 'tssub'
-    dest = '{}/{}/30lt/{}.dat'.format(cerfit_dir,t_30l_ref,subtract_name)
+    dest = '{}/{}/30lt/{}.dat'.format(cerfit_dir,tssub_refs['t_30l_ref'],subtract_name)
     if os.path.isfile(dest):os.system('ln -sf {} {}/{}_t_30lt.dat'.format(dest,cerfit_dir, subtract_name))
-    dest = '{}/{}/330lt/{}.dat'.format(cerfit_dir,t_330l_ref, subtract_name)
+    dest = '{}/{}/330lt/{}.dat'.format(cerfit_dir,tssub_refs['t_330l_ref'], subtract_name)
     if os.path.isfile(dest):os.system('ln -sf {} {}/{}_t_330lt.dat'.format(dest,cerfit_dir, subtract_name))
-    dest = '{}/{}/330lt/{}.dat'.format(cerfit_dir,v_330l_ref, subtract_name)
+    dest = '{}/{}/330lt/{}.dat'.format(cerfit_dir,tssub_refs['v_330l_ref'], subtract_name)
     if os.path.isfile(dest):os.system('ln -sf {} {}/{}_v_330lt.dat'.format(dest,cerfit_dir, subtract_name))
     #os.system('ln -sf {}/{}/330lt/tssub.dat {}/tssub_t_330lt.dat'.format(cerfit_dir,t_330l_ref,cerfit_dir))
     #os.system('ln -sf {}/{}/330lt/tssub.dat {}/tssub_v_330lt.dat'.format(cerfit_dir,v_330l_ref,cerfit_dir))
@@ -487,9 +508,10 @@ number_of_proc = 5
 if test_run: number_of_proc = 1
 tangential = True
 vertical = True
-if tangential: os.system('rm 160409.8t* d160409_tang*.nc')
-if vertical: os.system('rm 160409.8v* d160409_vert*.nc')
-exclude_systems = ['U1', 'U2']
+if tangential: os.system('rm {shot}.8t* d{shot}_tang*.nc'.format(shot = shot))
+if vertical: os.system('rm {shot}.8v* d{shot}_vert*.nc'.format(shot=shot))
+#exclude_systems = ['U1', 'U2']
+exclude_systems = []
 
 if test_run:
     chords = ['t01', 't08', 'v04']
@@ -523,7 +545,7 @@ print "Lower time: {}, upper time: {}".format(lower_time, upper_time)
 
 input_data_list = make_list_of_inputs(chords, tssubs, beams, number_of_proc)
 
-#number_of_proc = 1
+number_of_proc = 5
 if number_of_proc>1:
     p = multiprocessing.Pool(number_of_proc)
     p.map(run_cerfit_wrapper, input_data_list)
