@@ -275,12 +275,17 @@ ref_shot = 158676; ref_time = 3220; new_shot = 158676
 run_information = {}
 n = 5
 dnep_vals = np.linspace(0.2,0.6,n)
-count = 200
+count = 300
 force_ti_te_equal = True
 profile_ranges = {'NE':[[0.05], np.linspace(1,8,n).tolist(), [8.0]],
                   'TE':[[0.05], np.linspace(0.5,3,n).tolist(), [3.0]],
                   'TI':[[0.05], [1.], [2.0]],
                   'TROT':[[0.], [0.], [0.]]}
+dNE = 1.
+dTE = 3.5
+dTI = 3.5
+dTROT = False
+
 #TI, TE in keV
 #ne in 10^13 cm**-3
 if force_ti_te_equal:del(profile_ranges['TI'])
@@ -303,6 +308,12 @@ print unique_profiles
 for tmp in unique_profiles:
     arg_string = []
     for dat, key_name in zip(tmp,key_ordering):
+        dat = list(dat)
+        modded = False
+        if eval('d{}'.format(key_name))!=False:
+            dat[2] = dat[1] + eval('d{}'.format(key_name))
+            modded = True
+        print key_name, dat, modded
         arg_string.append('D{key}EDGE={},D{key}PED={},D{key}CORE={}'.format(*dat,key=key_name))
         run_information[count] = {'D{}EDGE'.format(key_name):dat[0],'D{}PED'.format(key_name):dat[1],'D{}CORE'.format(key_name):dat[2]}
     profile_args = ','.join(arg_string)
@@ -312,13 +323,11 @@ for tmp in unique_profiles:
     count+=1
 #setup_txt+='exit\n'
 print setup_profiles
-
 clean_gaprofiles_dir = True
 clean_f90_dir = True
 ga_profiles_dir = '/u/haskeysr/gaprofiles/{}'.format(new_shot)
 
 if clean_gaprofiles_dir:shutil.rmtree(ga_profiles_dir,ignore_errors=True)
-
 if not os.path.exists(ga_profiles_dir):os.makedirs(ga_profiles_dir)
     
 idl_input_file = 'test.txt'
@@ -431,3 +440,23 @@ for i in range(3):
 for i in range(3):
     print '{}los = [{}]'.format(axes[i], ','.join(['{:.4f}'.format(j) for j in loc[i]]))
 
+
+import numpy as np
+lens1 = np.array([-58.0452,238.6632,0.6822])
+loc1 = np.array([-133.64747, 172.84416, -1.4165587])
+lens2 = np.array([-58.045200, 238.66320, 0.68220000])
+loc2 = np.array([-134.95745, 186.51464, -1.0956602])
+ids = ['m17','m24','m25','m26','m27','m28','m29','m31','m32']
+ids = ['m17','m24','m25','m26','m27','m28','m29','m31','m32']
+ids = ['m{}'.format(i) for i in range(20,100)]
+n = len(ids)
+lens = [];loc = []
+axes = ['x','y','z']
+for i in range(3):
+    lens.append(np.linspace(lens1[i],lens2[i],n))
+    loc.append(np.linspace(loc1[i],loc2[i],n))
+for i in range(3):
+    print '{}lens = [{}]'.format(axes[i], ','.join(['{:.4f}'.format(j) for j in lens[i]]))
+for i in range(3):
+    print '{}los = [{}]'.format(axes[i], ','.join(['{:.4f}'.format(j) for j in loc[i]]))
+print 'mchords = [{}]'.format(','.join(["'{}'".format(i) for i in ids]))
