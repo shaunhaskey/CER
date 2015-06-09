@@ -2,31 +2,39 @@ import numpy as np
 import scipy.io.netcdf as netcdf
 import os
 import OMFITtree
-#import OMFITidlSav
 import matplotlib.pyplot as pt
 import numpy
 import scipy
 from scipy.optimize import curve_fit
 
+start_time = 520
+end_time = 530
+start_time = 600
+start_time = 800
+end_time = 825
+offset = 0
+jump = 5
+offset = 0
+jump = 1
+rel_times = range(start_time+offset, end_time,jump)
+import cPickle as pickle
+master_dict = pickle.load(file('/u/haskeysr/fida_sim_dict.pickle','r'))
 
 def gauss(x, *p):
     A, mu, sigma = p
     return A*numpy.exp(-(x-mu)**2/(2.*sigma**2))
 
-
-
 def get_data(dir, run_id = 'def', plot = False):
     #if 'inputs' not in locals():
     inputs = netcdf.netcdf_file(dir + '{}_inputs.cdf'.format(run_id),'r',mmap = False)
-    neutrals = netcdf.netcdf_file(dir + '{}_neutrals.cdf'.format(run_id),'r',mmap = False)
     spectra = netcdf.netcdf_file(dir + '{}_spectra.cdf'.format(run_id),'r',mmap = False)
-    weights = netcdf.netcdf_file(dir + '{}_fida_weights.cdf'.format(run_id),'r',mmap = False)
+    #neutrals = netcdf.netcdf_file(dir + '{}_neutrals.cdf'.format(run_id),'r',mmap = False)
+    #weights = netcdf.netcdf_file(dir + '{}_fida_weights.cdf'.format(run_id),'r',mmap = False)
+    neutrals=weights=None
     fida = +spectra.variables['fida'].data
     wave = +spectra.variables['lambda'].data
     halo = +spectra.variables['halo'].data
     BE = [+spectra.variables['full'].data, +spectra.variables['half'].data, +spectra.variables['third'].data]
-
-
     if plot:
         fig, ax = pt.subplots(nrows = len(BE)+1)
         for i in range(fida.shape[0]):
@@ -34,22 +42,20 @@ def get_data(dir, run_id = 'def', plot = False):
                 ax_tmp.plot(wave,dat_tmp[i,:])
             ax[len(BE)].plot(wave,halo[i,:])
         fig.canvas.draw();fig.show()
-
     #    ax[0].plot(fida[i,:])
     i = np.argmin(np.abs([np.mean(inputs.variables['z_grid'].data[i,:,:]) for i in range(inputs.variables['z_grid'].data.shape[0])]))
     z = inputs.variables['z_grid'].data[i,:,:]
     x_grid = inputs.variables['x_grid'].data[i,:,:]
     y_grid = inputs.variables['y_grid'].data[i,:,:]
-    dat_grid = neutrals.variables['halodens'].data[0,i,:,:]
-    n_halos = neutrals.variables['halodens'].shape[0]
     if plot:
+        dat_grid = neutrals.variables['halodens'].data[0,i,:,:]
+        n_halos = neutrals.variables['halodens'].shape[0]
         fig, ax = pt.subplots(nrows = n_halos)
         for j in range(n_halos):
             im = ax[j].pcolormesh(x_grid, y_grid, neutrals.variables['halodens'].data[j,i,:,:])
             pt.colorbar(im,ax=ax[j])
         fig.canvas.draw();fig.show
     return inputs, neutrals, spectra, weights
-
 
 def calc_ti_vel(data, wave, plot = True):
     hist = data/10. # convert to ph/s-m^2/sR-A
@@ -108,118 +114,183 @@ def calc_ti_vel(data, wave, plot = True):
     print '########## finished ###############'
     return ti, vlos
 
-fig_probes, ax_probes = pt.subplots(nrows = 2, sharex = True)
-for num in range(200,225):
+print 'hello world'
+fig_probes, ax_probes = pt.subplots(nrows = 5, sharex = True, sharey=True)
+fig_flux, ax_flux = pt.subplots(nrows = 5, sharex = True, sharey = True)
+fig_flux2, ax_flux2 = pt.subplots(nrows = 5, sharex = True, sharey = True)
+
+def plot_profiles():
+    fig, ax = pt.subplots(nrows = 3, sharex = True)
+    for num in rel_times:#range(start_time,end_time):
+        print num
+        HOME = os.environ['HOME']
+        dir =  HOME + '/158676/00001/MAIN_ION330/'
+        dir =  HOME + '/FIDASIM/RESULTS/D3D/158676/{:05d}/MAIN_ION330/'.format(num)
+        run_id = 'def'
+        #inputs, neutrals, spectra, weights = get_data(dir, run_id = 'def', plot = False)
+        #halo = +spectra.variables['halo'].data
+        a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(num, num))
+        b = a['AuxQuantities']
+        rgrid,zgrid = np.meshgrid(b['R'],b['Z'])
+        r_new = np.linspace(1.4, 2.5, 300)
+        z_new = r_new * 0
+        use_rho = True
+
+        if use_rho:
+            interp_key = 'RHOpRZ'
+            sav_key = 'RHO'
+        else:
+            interp_key = 'PSIRZ_NORM'
+            sav_key = 'PSI'
+        flux_new = scipy.interpolate.griddata((rgrid.flatten(),zgrid.flatten()),b[interp_key].flatten(),(r_new,z_new))
+        print num
+        for plot_key,ax_tmp in zip(['ti','te','ne'],ax):
+            print plot_key, ax_tmp
+            fname = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/d{}158676.{:05d}'.format(num,plot_key, num)
+            dat_obj = OMFITtree.OMFITidlSav(fname)['{}_str'.format(plot_key)]
+            if plot_key=='ne':
+                tmp = 'DENS'
+            else:
+                tmp = plot_key.upper()
+            print dat_obj.keys()
+            print dat_obj['RHO_{}'.format(tmp)]
+            dat_psi = dat_obj['{}_{}'.format(sav_key,tmp)]
+            dat_dat = dat_obj[tmp]
+            dat_interp = np.interp(flux_new, dat_psi, dat_dat,)
+            ax_tmp.plot(r_new, dat_interp,'b-')
+        #ax_tmp[1].pcolor(R_array, Z_array, psi_array)
+    fig.canvas.draw();fig.show()
+
+
+import cer_funcs as CER
+def mtanh_wrapper(x,*p):
+    core = [0.02]#, 0.001]
+    edge = [-0.02]
+    p = [i for i in p]
+    p = p + [len(core), len(edge), False] + core + edge
+    print p
+    y = CER.mtanh(x,*p)
+    return y
+
+
+plot_profiles()
+1/0
+fit_coeffs = []
+fit_coeffs_orig = []
+for num in rel_times:
     HOME = os.environ['HOME']
     #num = 200
     dir =  HOME + '/158676/00001/MAIN_ION330/'
     dir =  HOME + '/FIDASIM/RESULTS/D3D/158676/{:05d}/MAIN_ION330/'.format(num)
     run_id = 'def'
-    inputs, neutrals, spectra, weights = get_data(dir, run_id = 'def', plot = False)
-    halo = +spectra.variables['halo'].data
-    a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(num, num))
-    te_name = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/dte158676.{:05d}'.format(num, num)
-    te_dat = OMFITtree.OMFITidlSav(te_name)['te_str']
-    #te = scipy.io.readsav(te_name,python_dict=True)
-    #te_psi_norm = te_dat['te_str']['TE_DATA'][0]['PSI_NORM'][0]
-    te_psi = te_dat['PSI_TE']
-    te = te_dat['TE']
-    #te_psi_norm = te['te_str']['PSI_TE'][0]
-    #edge_loc = np.argmin(np.abs(te['te_str']['RHO_TE'][0] - te['te_str']['MAXRHO'][0]))
-    #te_psi_norm = te_psi_norm - np.min(te_psi_norm)
-    #te_psi_norm /= te_psi_norm[edge_loc]
-    psi_list = []
-    Z_list = []
-    R_list = []
-    R_array = np.array([])
-    Z_array = np.array([])
-    psi_array = np.array([])
-    #new_vals = np.linspace()
+    try:
+        inputs, neutrals, spectra, weights = get_data(dir, run_id = 'def', plot = False)
+        read_data = True
+    except IOError:
+        print 'COULDN"T READ INPUT FOR ',num
+        read_data = False
+    if read_data:
+        use_rho = True
+        if use_rho:
+            interp_key = 'RHOpRZ'
+            interp_key = 'RHORZ'
+            sav_key = 'RHO'
+        else:
+            interp_key = 'PSIRZ_NORM'
+            sav_key = 'PSI'
 
-    plot = False
-    if plot:
-        fig, ax = pt.subplots()
-        for i in a['fluxSurfaces']['flux'].keys():
-            ax.plot(a['fluxSurfaces']['flux'][i]['R'], a['fluxSurfaces']['flux'][i]['Z'],'--')
+        halo = +spectra.variables['halo'].data
+        plot_key = 'ti'
+        a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(num, num))
+        prof_name = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/d{}158676.{:05d}'.format(num,plot_key, num)
+        prof_dat = OMFITtree.OMFITidlSav(prof_name)['{}_str'.format(plot_key)]
+        prof_flux = prof_dat['{}_{}'.format(sav_key, plot_key.upper())]
+        prof = prof_dat[plot_key.upper()]
+        psi_list = []
+        Z_list = []
+        R_list = []
+        plot = False
+        if plot:
+            fig, ax = pt.subplots()
+            for i in a['fluxSurfaces']['flux'].keys():
+                ax.plot(a['fluxSurfaces']['flux'][i]['R'], a['fluxSurfaces']['flux'][i]['Z'],'--')
 
-        fig.canvas.draw();fig.show()
-    for i in a['fluxSurfaces']['flux'].keys():
-        psi_list.append(np.array(a['fluxSurfaces']['flux'][i]['psi']* a['fluxSurfaces']['flux'][i]['Z']))
-        R_array = np.append(np.array(a['fluxSurfaces']['flux'][i]['R']),R_array)
-        Z_array = np.append(np.array(a['fluxSurfaces']['flux'][i]['Z']),Z_array)
-        psi_array = np.append(a['fluxSurfaces']['flux'][i]['psi']+0* np.array(a['fluxSurfaces']['flux'][i]['Z']),psi_array)
-        Z_list.append(np.array(a['fluxSurfaces']['flux'][i]['Z']))
-        R_list.append(np.array(a['fluxSurfaces']['flux'][i]['R']))
-
-    #Normalise psi_array
-    psi_array = psi_array  - np.min(psi_array)
-    psi_array /= np.max(psi_array)
-    #Values to interpolate the te profile onto
-    r_new = np.linspace(np.min(R_array), np.max(R_array),300)
-    z_new = r_new * 0
-    psi_new = scipy.interpolate.griddata((R_array,Z_array),psi_array,(r_new,z_new))
-    te_interp = np.interp(psi_new, te_psi, te,)
-    if plot:
-        fig_tmp, ax_tmp = pt.subplots(nrows = 2)
-        ax_tmp[0].plot(r_new,psi_new)
-        #ax_tmp[1].pcolor(R_array, Z_array, psi_array)
-        fig_tmp.canvas.draw();fig_tmp.show()
-
-    wave = +spectra.variables['lambda'].data
-    bin_centres = wave
-    wave = wave*10.  #Angstroms
-    #halo[0,:]
-    plot_spectrum = False
-    ti_list = []; vel_list = []
-    for i in range(halo.shape[0]):
-        ti, vel = calc_ti_vel(halo[i,:], wave, plot=plot_spectrum)
-        ti_list.append(ti)
-        vel_list.append(vel)
-
-    r_probes = spectra.variables['radius'].data/100.
-    ax_probes[0].plot(r_probes,ti_list,'-o')
-    ax_probes[1].plot(r_probes,vel_list,'-o')
-    ax_probes[0].set_ylim([0,4])
-    ax_probes[0].set_xlim([1.45, 2.32])
-    #ax_probes[0].plot(int1*100,r_new2,'o')
-    ax_probes[0].plot(r_new, te_interp,'b-')
-    #ax[].set_ylim([0,4])
-    fig_probes.canvas.draw();fig_probes.show()
-
-    if plot:
-        fig1, ax1 = pt.subplots()
-        ax1.plot(te_psi, te,'x')
-        ax1.plot(psi_new, te_interp,'o')
-        fig1.canvas.draw();fig1.show()
-# # Define some test data which is close to Gaussian
-# data = numpy.random.normal(size=100000)
-
-# hist, bin_edges = numpy.histogram(data, density=True,bins = 300)
-# bin_centres = (bin_edges[:-1] + bin_edges[1:])/2
-
-# # Define model function to be used to fit to the data above:
-# # p0 is the initial guess for the fitting coefficients (A, mu and sigma above)
-# p0 = [1., 0., 1.]
-
-# coeff, var_matrix = curve_fit(gauss, bin_centres, hist, p0=p0)
-
-# # Get the fitted curve
-# hist_fit = gauss(bin_centres, *coeff)
-# plt.figure()
-# plt.plot(bin_centres, hist, label='Test data')
-# plt.plot(bin_centres, hist_fit, label='Fitted data')
-
-# # Finally, lets get the fitting parameters, i.e. the mean and standard deviation:
-# print 'Fitted mean = ', coeff[1]
-# print 'Fitted standard deviation = ', coeff[2]
+            fig.canvas.draw();fig.show()
+        r_new = np.linspace(1.4, 2.5, 300)
+        z_new = r_new * 0
+        b = a['AuxQuantities']
+        rgrid,zgrid = np.meshgrid(b['R'],b['Z'])
+        r_probes = spectra.variables['radius'].data/100.
+        flux_new = scipy.interpolate.griddata((rgrid.flatten(),zgrid.flatten()),b[interp_key].flatten(),(r_new,z_new))
+        flux_probe = scipy.interpolate.griddata((rgrid.flatten(),zgrid.flatten()),b[interp_key].flatten(),(r_probes,r_probes * 0))
+        #flux_new = scipy.interpolate.griddata((rgrid.flatten(),zgrid.flatten()),b['PSIRZ_NORM'].flatten(),(r_new,z_new))
+        prof_interp = np.interp(flux_new, prof_flux, prof,)
 
 
-# plt.show()
+        if plot:
+            fig_tmp, ax_tmp = pt.subplots(nrows = 2)
+            ax_tmp[0].plot(r_new,flux_new)
+            #ax_tmp[1].pcolor(R_array, Z_array, psi_array)
+            fig_tmp.canvas.draw();fig_tmp.show()
 
+        wave = +spectra.variables['lambda'].data
+        bin_centres = wave
+        wave = wave*10.  #Angstroms
+        #halo[0,:]
+        plot_spectrum = False
+        ti_list = []; vel_list = []
+        for i in range(halo.shape[0]):
+            ti, vel = calc_ti_vel(halo[i,:], wave, plot=plot_spectrum)
+            ti_list.append(ti)
+            vel_list.append(vel)
 
-#b['ne_str']['DENS']
-#b['ne_str']['RHO_DENS']
-#b['ne_str']['PSI_DENS']
-#ax.plot(b['ne_str']['RHO_DENS'][0],b['ne_str']['DENS'][0],'-')
-#te['ne_str']['PSI_TE']
-#te['ne_str']['PSI_TE']
+        ax_probes[0].plot(r_probes,ti_list, marker='.',linestyle='-')
+        ax_flux[num%5].plot(flux_probe,ti_list, marker='.',linestyle='-')
+        ax_flux[num%5].plot(prof_flux, prof,'b-')
+        ax_flux2[int((num-start_time)/5.)].plot(flux_probe,ti_list, marker='.',linestyle='-')
+        ax_flux2[int((num-start_time)/5.)].plot(prof_flux, prof,'b-')
+        guess = [1.5, 0.2, 0.9, 0.05,]
+        coeff, var_matrix = curve_fit(mtanh_wrapper, flux_probe, ti_list, p0=guess,)
+
+        guess_orig = [1.5, 0.2, 0.9, 0.05,]
+        coeff_orig, var_matrix_orig = curve_fit(mtanh_wrapper, prof_flux, prof, p0=guess_orig,)
+
+        fit_coeffs_orig.append(coeff_orig)
+
+        fit_coeffs.append(coeff)
+        y2 = mtanh_wrapper(flux_probe, *coeff)
+        y3 = mtanh_wrapper(prof_flux, *coeff_orig)
+        ax_flux[num%5].plot(flux_probe, y2)
+        ax_flux[num%5].plot(prof_flux, y3,'r--')
+        ax_flux2[int((num-start_time)/5)].plot(flux_probe, y2)
+        ax_flux2[int((num-start_time)/5)].plot(prof_flux, y3,'r--')
+        
+        ax_probes[1].plot(r_probes,vel_list,'-o')
+        ax_probes[0].set_ylim([0,4])
+        ax_probes[0].set_xlim([1.45, 2.32])
+        #ax_probes[0].plot(int1*100,r_new2,'o')
+        ax_probes[0].plot(r_new, prof_interp,'b-')
+        #ax[].set_ylim([0,4])
+
+        if plot:
+            fig1, ax1 = pt.subplots()
+            ax1.plot(prof_flux, prof,'x')
+            ax1.plot(flux_new, prof_interp,'o')
+            fig1.canvas.draw();fig1.show()
+fig_probes.canvas.draw();fig_probes.show()
+fig_flux.canvas.draw();fig_flux.show()
+fig_flux2.canvas.draw();fig_flux2.show()
+top = [i[0] for i in fit_coeffs]
+offset = [i[1] for i in fit_coeffs]
+sym = [i[2] for i in fit_coeffs]
+width = [i[3] for i in fit_coeffs]
+width_orig = [i[3] for i in fit_coeffs_orig]
+top_orig = [i[0] for i in fit_coeffs_orig]
+fig, ax = pt.subplots(ncols = 2)
+ax[0].plot(width)
+ax[0].plot(width_orig)
+ax[1].plot(top)
+ax[1].plot(top_orig)
+fig.canvas.draw();fig.show()
+ax[1].set_ylim([0,ax[1].get_ylim()[1]])
+fig.canvas.draw();fig.show()

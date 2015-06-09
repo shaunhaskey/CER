@@ -82,18 +82,10 @@ cerfit_fit_chords.bash [shot] "v07 v24 v08 v09 v10 v11 v12" "tssub_330lt.dat" "b
 cerfit_fit_chords.bash [shot] "v07 v24 v08 v09 v10 v11 v12 v14 v16" "tssub_330rt.dat" "beam=330rt"
 '''
 
-import os, time
+import os, time, copy
 import multiprocessing
-
-def read_subtract_file(fname):
-    with file(fname,'r') as filehandle: in_lines = filehandle.readlines()
-    data = []
-    for i in range(len(in_lines)):
-        cur_line = in_lines[i]
-        if cur_line.find('time')==0:
-            cur_line_plus = in_lines[i+1]
-            data.append([cur_line.split('=')[-1].rstrip('\n'), cur_line_plus.split('=')[-1].rstrip('\n')])
-    return data
+import cer_funcs as CER
+#read_subtract_file(fname)
 
 def assemble_subtracts(sub_list, fname = False):
     out_txt = ''.join(['time={}\ntssub={}\ngo\n\n'.format(i[0],i[1]) for i in sub_list])
@@ -140,7 +132,7 @@ def make_input_file(chords, tssubs, beams, output_fname, show_plot=True):
     for chord, tssub, beam in zip(chords, tssubs, beams):
         with file('orig_inputs/in_{}.dat'.format(chord),'r') as filehandle:
             config = filehandle.read()
-        sub_data = read_subtract_file(tssub)
+        sub_data = CER.read_subtract_file(tssub)
         tmp_name = '{}_{}.dat'.format(tssub.split('.')[0], chord)
         sub_data = remove_times(sub_data, chord)
         sub_data = mod_times(sub_data, chord)
@@ -320,9 +312,10 @@ def read_in_npeaks(chords):
 def read_extra_cmds():
     try:
         with file('{}/extra_cmds2.txt'.format(cerfit_dir), 'r') as filehandle:
-            lines = filehandle.readlines()
+            lines_orig = filehandle.readlines()
     except:
-        lines = []
+        lines_orig = []
+    lines = copy.deepcopy(lines_orig)
     print lines
     extra_cmds = {}
     kill_times = {}
@@ -398,7 +391,7 @@ def read_extra_cmds():
             #extra_cmds[lab] = val
     for i in extra_cmds.keys():extra_cmds[i] += 'npeak {}\n'.format(npeaks[i])
     for i in extra_cmds.keys():print i,extra_cmds[i]
-    return extra_cmds, kill_times, modify_times, lower_time, upper_time
+    return extra_cmds, kill_times, modify_times, lower_time, upper_time, lines_orig
 
 
 def read_remove_list():
@@ -407,6 +400,19 @@ def read_remove_list():
             lines = filehandle.readlines()
     except:
         lines = []
+
+    #Strip out any comments in the commands
+    lines_new = []
+    for i in lines:
+        if i.strip(' ').find('#')==0:
+            pass
+        elif i.find('#')>0:
+            lines_new.append(i[:i.find('#')])
+        else:
+            lines_new.append(i)
+    print lines
+    print lines_new
+    lines = lines_new
     print lines
     remove_list = []
     for i in lines:
@@ -504,7 +510,7 @@ subtract_name = 'timesub'
 setup_tssub_links(subtract_name)
 
 test_run = False
-number_of_proc = 5
+number_of_proc = 4
 if test_run: number_of_proc = 1
 tangential = True
 vertical = True
@@ -539,7 +545,7 @@ else:
 npeaks =  read_in_npeaks(chords)
 
 
-extra_cmds, kill_times, modify_times, lower_time, upper_time = read_extra_cmds()
+extra_cmds, kill_times, modify_times, lower_time, upper_time, orig_lines = read_extra_cmds()
 print "Lower time: {}, upper time: {}".format(lower_time, upper_time)
 #1/0
 
@@ -551,6 +557,9 @@ if number_of_proc>1:
     p.map(run_cerfit_wrapper, input_data_list)
 else:
     map(run_cerfit_wrapper, input_data_list)
+
+with file('{}/last_used_commands.txt'.format(cerfit_dir), 'w') as filehandle:
+    lines_orig = filehandle.writelines(orig_lines)
 
 #output_fname = 'tmp2.dat'
 #input_data = [output_fname, chords, tssubs, beams]

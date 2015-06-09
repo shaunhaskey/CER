@@ -1,3 +1,9 @@
+'''
+Todo list:
+-> Run CERFIT from within this widget for minor changes like modifying the time subtraction slice
+-> Plot the profiles as a function of time, and allow stepping through this data
+-> Modification, removal etc... of action items from the widget
+'''
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
 from matplotlib.backends.backend_gtkagg import NavigationToolbar2GTKAgg as NavigationToolbar
@@ -7,6 +13,7 @@ import scipy.interpolate as interp
 import numpy as np
 import matplotlib.pyplot as pt
 import sys
+import cer_funcs as CER
 HOME = os.environ['HOME']
 shot = int(sys.argv[1])
 
@@ -26,19 +33,26 @@ class gui():
         self.win.connect("destroy", lambda x: gtk.main_quit())
         self.win.connect("key-press-event",self.on_window_key_press_event)
         self.win.set_default_size(400,300)
-        self.win.set_title("Embedding in GTK")
+        self.win.set_title("CERFIT helper")
         self.cold_line_select = False
         self.im_quant = 'residuals'
         self.notebook = gtk.Notebook()
-        self.win.add(self.notebook,)
+        self.overall_vbox = gtk.VBox()
+        self.overall_vbox.pack_start(self.notebook, expand = True, fill = True, padding = 0)
+        #self.win.add(self.notebook,)
+        self.win.add(self.overall_vbox,)
         self.plot_dict = {'resid':{'plot':1,'axes':[],'plot_func':self.plot_residuals, 'refresh':False, 'args':[],'xax':''},
                           'spec':{'plot':0,'axes':[],'plot_func':self.plot_spectra, 'refresh':True, 'args':[],'xax':'pixel'},
                           'resid_dot':{'plot':2,'axes':[],'plot_func':self.plot_residual_dots, 'refresh':True, 'args':[],'xax':'pixel'},
                           'temp':{'plot':3,'axes':[],'plot_func':self.plot_time_varying_1D, 'refresh':True, 'args':['temperature', 'temp'],'xax':'time'},
                           'vel':{'plot':-1,'axes':[],'plot_func':self.plot_time_varying_1D, 'refresh':True, 'args':['location','vel'],'xax':'time'},
                           'amp':{'plot':-1,'axes':[],'plot_func':self.plot_time_varying_1D, 'refresh':True, 'args':['amplitude','amp'],'xax':'time'}}
+
         self.fig_radial, self.canvas_radial, self.vbox_radial, self.toolbar_radial = self.add_matplotlib()
+        self.fig_timing, self.canvas_timing, self.vbox_timing, self.toolbar_timing = self.add_matplotlib()
+
         self.ax_radial = [self.fig_radial.add_subplot(2,2,i) for i in range(1,5)]
+        self.ax_timing = [self.fig_timing.add_subplot(1,1,i) for i in range(1,2)]
         #Get the available netCDF data 
         self.get_netcdf()
         #Setup the plot selection frame
@@ -58,6 +72,7 @@ class gui():
         self.entry_button.connect("clicked", self.entry_button_pressed, "cool button")
         entry_hbox.pack_start(self.entry_text)
         entry_hbox.pack_start(self.entry_button, expand = False, fill = False, padding = 0)
+
         self.entry_text.set_editable(False)
         vbox = gtk.VBox()
         self.action_list_label = gtk.Label()
@@ -65,14 +80,33 @@ class gui():
         self.action_list_scroll.set_border_width(10)
         self.action_list_scroll.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_ALWAYS)
 
-
+        #self.get_timing_info()
         self.action_list_button = gtk.Button(label='Write File')
+        self.timing_button = gtk.Button(label='Timing')
         self.action_list_button.connect("clicked", self.action_list_button_pressed, "cool button")
+        self.timing_button.connect("clicked", self.update_timing, "cool button")
 
         self.action_list_scroll.add_with_viewport(self.action_list_label)
         #vbox.pack_start(self.action_list_label)
+        vbox_timing = gtk.VBox()
+        self.timing_combobox_chan = gtk.combo_box_new_text()
+        self.timing_combobox_beam = gtk.combo_box_new_text()
+        for i in ['30','33','21']:
+            self.timing_combobox_beam.append_text(i+'r')
+            self.timing_combobox_beam.append_text(i+'l')
+        hbox_timing = gtk.HBox()
+        hbox_timing.pack_start(self.timing_combobox_chan)
+        hbox_timing.pack_start(self.timing_combobox_beam)
+        hbox_timing.pack_start(self.timing_button)
+        
+        for i in self.chan_sels: self.timing_combobox_chan.append_text(i.get_label())
+
+        vbox_timing.pack_start(hbox_timing, expand = False, fill = False, padding = 0)
+        #vbox_timing.pack_start(self.timing_button, expand = False, fill = False, padding = 0)
+        vbox_timing.pack_start(self.vbox_timing, expand = True, fill = True, padding = 0)
         vbox.pack_start(self.action_list_scroll)
-        vbox.pack_start(self.action_list_button)
+        vbox.pack_start(self.action_list_button, expand = False, fill = False, padding = 0)
+        #vbox.pack_start(self.timing_button)
 
 
         tmp_txt = self.action_list_label.get_label()
@@ -85,16 +119,18 @@ class gui():
         self.action_list_label.set_label('\n'.join(self.action_list))
 
         hbox = gtk.HBox(homogeneous = False)
-        self.figure_parent.pack_end(entry_hbox, expand = False, fill = False, padding = 0)
+        #self..pack_start(self.notebook, expand = True, fill = True, padding = 0)
+        self.overall_vbox.pack_end(entry_hbox, expand = False, fill = False, padding = 0)
         self.figure_parent.pack_end(self.status_label, expand = False, fill = False, padding = 0)
         self.figure_parent.pack_end(self.action_status, expand = False,fill = False, padding = 0)
         hbox.pack_start(self.figure_parent, expand = True, fill = True)
         hbox.pack_end(self.chans_vbox, expand = False,fill = False, padding = 0)
 
-        self.notebook.append_page(hbox)
-        self.notebook.append_page(self.resids_parent)
-        self.notebook.append_page(vbox)
-        self.notebook.append_page(self.vbox_radial)
+        self.notebook.append_page(hbox,gtk.Label("Data"))
+        self.notebook.append_page(self.resids_parent,gtk.Label("Residuals"))
+        self.notebook.append_page(vbox, gtk.Label("ActionItems"))
+        self.notebook.append_page(self.vbox_radial,gtk.Label('RadialProfiles'))
+        self.notebook.append_page(vbox_timing,gtk.Label('Timing'))
 
         #Set an initial time value
         self.x_val = 1000
@@ -102,6 +138,68 @@ class gui():
 
         self.plot_all_residuals()
         self.win.show_all()
+
+    def get_timing_info(self,beam_chan, chord):
+        shot_data = CER.read_shot_status(shot)
+        for i in shot_data.keys():
+            print i, shot_data[i]['CHOR'].lower()
+            if shot_data[i]['CHOR'].lower().find(chord)>=0:
+                spec = i
+        print spec, shot_data[spec]['CHOR']
+        stri = shot_data[spec]['TIMI']
+        print stri
+        #stri = '0.0:2000@5.0/1'
+        self.start_time, self.n_slices, self.t_int, self.start_pts, self.end_pts = CER.split_timing_string(stri)
+        self.nbi_x, self.nbi_y = CER.get_nbi_data(self.shot, beam_chan)
+        self.fscope_x, self.fscope_y = CER.get_fscope(self.shot,)
+        if beam_chan.find('33')>=0: 
+            beam_chan_mod = beam_chan.replace('33','330')
+        elif beam_chan.find('21')>=0: 
+            beam_chan_mod = beam_chan.replace('21','210')
+        else:
+            beam_chan_mod = beam_chan
+        ts_fname =  HOME + '/cerfit/{shot}/'.format(shot = self.shot) + 'timesub_{}_{}t_{}.dat'.format(chord[0],beam_chan_mod,chord)
+        print ts_fname
+        self.ts_data = CER.read_subtract_file(ts_fname)
+        self.ts_data = np.array([[float(i[0]),float(i[1])] for i in self.ts_data])
+        print self.ts_data.shape
+
+    def update_timing(self,*args):
+        chord = self.timing_combobox_chan.get_active_text()
+        beam = self.timing_combobox_beam.get_active_text()
+        chord_num = int(chord[4:])
+        chord_tmp = chord[:4].replace('tang','t').replace('vert','v')
+        chord = '{}{:02d}'.format(chord_tmp,chord_num)
+        print 'beam:{},chord{}'.format(beam, chord)
+        #chord = 't01'
+        self.get_timing_info(beam, chord)
+        self.ax_timing[0].cla()
+        self.ax_timing[0].plot(self.nbi_x,self.nbi_y/np.max(self.nbi_y))
+        self.ax_timing[0].plot(self.start_pts, self.start_pts*0+1,'o')
+        self.ax_timing[0].plot(self.fscope_x,self.fscope_y/np.max(self.fscope_y))
+        valid = (self.ts_data[:,0]<(self.x_val+100)) * (self.ts_data[:,0]>(self.x_val-100))
+        tmp_x = np.zeros((len(self.ts_data[valid,0]),2),dtype=float)
+        tmp_y = np.zeros((len(self.ts_data[valid,0]),2),dtype=float)
+        print tmp_x.shape
+        tmp_x[:,0] = self.ts_data[valid,0]
+        tmp_x[:,1] = self.ts_data[valid,0] + self.ts_data[valid,1]*self.t_int
+        tmp_y[:,0] = self.ts_data[valid,0]*0+0.8
+        tmp_y[:,1] = self.ts_data[valid,0]*0+0.6
+        
+        for i in range(tmp_x.shape[0]):
+            print tmp_x[i,:], tmp_y[i,:]
+            self.ax_timing[0].plot([tmp_x[i,0],tmp_x[i,0]+self.t_int], [0.8,0.8],'xb-')
+            self.ax_timing[0].plot([tmp_x[i,1],tmp_x[i,1]+self.t_int], [0.6,0.6],'xb-')
+            self.ax_timing[0].plot(tmp_x[i,:]+self.t_int/2., tmp_y[i,:], '-b')
+
+        #self.ax_timing[0].plot(tmp_x, tmp_y, 'k-x')
+        #self.ax_timing[0].plot(self.ts_data[valid,0], self.ts_data[valid,0]*0+0.8,'x')
+        #self.ax_timing[0].plot(self.ts_data[valid,0]+self.ts_data[valid,1]*self.t_int, self.ts_data[valid,0]*0+0.6,'d')
+        
+        self.ax_timing[0].set_xlim([self.x_val-50, self.x_val+50])
+        self.ax_timing[0].set_ylim([0,1.3])
+        self.ax_timing[0].axvline(self.x_val)
+        self.fig_timing.canvas.draw()
 
     def action_list_button_pressed(self,*args):
         tmp_txt = self.action_list_label.get_label()
