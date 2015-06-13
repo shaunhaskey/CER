@@ -13,7 +13,7 @@ import itertools as iter
 import fida_funcs as FIDA
 import cer_funcs as CER
 import numpy as np
-import matplotlib.pyplot as pt
+#import matplotlib.pyplot as pt
 import subprocess as sub
 from scipy.io import netcdf
 #Should I remove those directories before doing anything else?
@@ -34,7 +34,7 @@ if os.environ['HOST'].find('venus')>=0:
 else:
     HOST='portal'
 #Open the file to write the new profiles to (for passing to IDL) -> move this to pIDLy?
-f = netcdf.netcdf_file('/u/haskeysr/test.nc','w')
+f = netcdf.netcdf_file('/u/haskeysr/test.nc','w', mmap=False)
 idl_string = FIDA.idl_header
 model_dir = '/u/haskeysr/gaprofiles/model/'
 model_shot = 158676
@@ -52,7 +52,7 @@ for tmp_prefix in file_prefix:
             model_fnames.append([tmp_prefix, i])
 idl_strs = []
 widths = np.linspace(0.01,0.12,5)
-base_time = 900
+base_time = 1100
 #new_times = np.arange(len(widths)) + base_time
 shot_list = []; time_list = []
 max_val = 1.21
@@ -104,14 +104,25 @@ for i, width in enumerate(widths):
         count += 1
         #idl_strs.append('''gap_model_dir = '{}'\ngap_model_shot = '{}'\ngap_model_time = {}\n'''.format(cur_dir,new_shot,new_time))
 
-f.close()
+time_mod.sleep(1)
+try_count = 0
+failed = True
+while failed or try_count>10:
+    try:
+        f.close()
+        failed = False
+        print 'success'
+    except IndexError:
+        try_count += 1
+        print 'failed'
+        time_mod.sleep(0.5)
 with file('/u/haskeysr/idl_test.pro','w') as filehandle:filehandle.write(idl_string)
 idl_text2 = '@{}\nexit\n'.format('/u/haskeysr/idl_test.pro')
 with file('/u/haskeysr/idl_test2.pro','w') as filehandle:
     filehandle.write(idl_text2)
 time_mod.sleep(4)
 os.system('idl < /u/haskeysr/idl_test2.pro')
-
+1/0
 #Finished with the profiles at this point, now move on to the actual FIDASIM part
 
 #Settings
