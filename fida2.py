@@ -51,7 +51,7 @@ for tmp_prefix in file_prefix:
         if (i.find(tmp_prefix)==0) and (i.find(model_shot_str)>=0) and (i.find(model_time_str)>=0):
             model_fnames.append([tmp_prefix, i])
 idl_strs = []
-widths = np.linspace(0.01,0.12,5)
+widths = np.linspace(0.01,0.12,2)
 base_time = 1100
 #new_times = np.arange(len(widths)) + base_time
 shot_list = []; time_list = []
@@ -59,7 +59,7 @@ max_val = 1.21
 npts = 121
 count = 0
 
-te_val_top_list = np.linspace(0.5,2.5,5)
+te_val_top_list = np.linspace(0.5,2.5,2)
 #ne_val_top_list = np.linspace(0.5,2.5,5)
 ne_val_top = 4.; te_val_top = 3.; ti_val_top = 3.
 for i, width in enumerate(widths):
@@ -116,17 +116,18 @@ while failed or try_count>10:
         try_count += 1
         print 'failed'
         time_mod.sleep(0.5)
-with file('/u/haskeysr/idl_test.pro','w') as filehandle:filehandle.write(idl_string)
 
-idl_text2 = '@{}\nexit\n'.format('/u/haskeysr/idl_test.pro')
+f1 = '/u/haskeysr/idl_test.pro'
 f2 = '/u/haskeysr/idl_test2.pro'
+with file(f1,'w') as filehandle:filehandle.write(idl_string)
+idl_text2 = '@{}\nexit\n'.format('/u/haskeysr/idl_test.pro')
 with file(f2,'w') as filehandle:
     filehandle.write(idl_text2)
 FIDA.check_file_exists(f1, max_time = 10, interval = 0.1)
 FIDA.check_file_exists(f2, max_time = 10, interval = 0.1)
 time_mod.sleep(4)
 os.system('idl < /u/haskeysr/idl_test2.pro')
-1/0
+
 #Finished with the profiles at this point, now move on to the actual FIDASIM part
 
 #Settings
@@ -145,12 +146,12 @@ master_dict['settings']['pppl_base_dir'] = pppl_base_dir
 master_dict['settings']['d3d_base_dir'] = d3d_base_dir
 
 
-pppl_actual_dir_list, d3d_actual_dir_list = FIDA.create_dirs(shot_list, time_list,diag)
-FIDA.make_run_idl(shot_list, time_list, diag)
+pppl_actual_dir_list, d3d_actual_dir_list = FIDA.create_dirs(shot_list, time_list,diag, pppl_base_dir, d3d_base_dir, master_dict)
+FIDA.make_run_idl(shot_list, time_list, diag, d3d_base_dir, beam, comment)
 job_id = 'fidasim'
-FIDA.write_job_file(d3d_actual_dir_list, pppl_actual_dir_list, job_id)
+FIDA.write_job_file(d3d_actual_dir_list, pppl_actual_dir_list, job_id, HOST)
 if HOST=='portal':
-    FIDA.modify_dat_file(d3d_actual_dir_list, pppl_actual_dir_list)
+    FIDA.modify_dat_file(d3d_actual_dir_list, pppl_actual_dir_list, HOST)
 #What to do about the results that may already exist in the remote directory?
 if HOST=='portal': 
     for i in set(shot_list):FIDA.copy_files(i)
@@ -159,6 +160,7 @@ setpoint = 13
 with file(fida_runs_fname,'w') as filehandle: filehandle.write('{}\n'.format(setpoint))
 import cPickle as pickle
 pickle.dump(master_dict,file('/u/haskeysr/fida_sim_dict.pickle','w'))
+1/0
 FIDA.batch_launch_fida(master_dict['sims'], fida_runs_fname, setpoint = setpoint, id_string = job_id)
 
 

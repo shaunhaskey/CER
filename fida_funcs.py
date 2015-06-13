@@ -1,3 +1,6 @@
+import os
+import time as time_mod
+import subprocess as sub
 setup_txt2 = '''.compile /u/grierson/idlpros/add/addanon
 .compile /u/grierson/idlpros/add/addbrian
 addanon
@@ -213,12 +216,12 @@ def batch_launch_fida(master_dict, job_num_filename, setpoint = 5, id_string = '
 def check_file_exists(fname, max_time = 10, interval = 0.1):
     max_count = max_time / interval
     count = 0
-    while (not os.path.isfile(fname)) or (count <max_count):
+    while (not os.path.isfile(fname)) and (count <max_count):
         time_mod.sleep(interval)
-        print 'hello'
+        print 'hello', fname, count, max_count
         count += 1
 
-def create_dirs(shot_list, time_list, diag):
+def create_dirs(shot_list, time_list, diag, pppl_base_dir, d3d_base_dir, master_dict):
     pppl_actual_dir_list = []
     d3d_actual_dir_list = []
     for shot,time in zip(shot_list, [int(tmp1) for tmp1 in time_list]):
@@ -238,7 +241,7 @@ def create_dirs(shot_list, time_list, diag):
     return pppl_actual_dir_list, d3d_actual_dir_list
 
 
-def make_run_idl(shot_list, time_list, diag):
+def make_run_idl(shot_list, time_list, diag, d3d_base_dir, beam, comment):
     idl_input_file = r'{}/{}/idl_input_file'.format(d3d_base_dir,shot_list[0]).replace('//','/')
     idl_output_log = r'{}/{}/idl_output_log'.format(d3d_base_dir,shot_list[0]).replace('//','/')
     f90_overall = ''
@@ -276,7 +279,7 @@ def make_run_idl(shot_list, time_list, diag):
     os.system('idl < {} | tee {}'.format(idl_input_file2, idl_output_log))
 
 
-def write_job_file(d3d_actual_dir_list, pppl_actual_dir_list, job_id):
+def write_job_file(d3d_actual_dir_list, pppl_actual_dir_list, job_id, HOST):
     if HOST=='venus':
         job_template = pbs_file_venus
         run_dir_list = d3d_actual_dir_list
@@ -295,7 +298,7 @@ def write_job_file(d3d_actual_dir_list, pppl_actual_dir_list, job_id):
             os.system('chmod +x {}'.format(wrapper_fname))
         count+=1
 
-def modify_dat_file(d3d_actual_dir_list, pppl_actual_dir_list):
+def modify_dat_file(d3d_actual_dir_list, pppl_actual_dir_list, HOST):
     if HOST=='venus':
         dir_list = d3d_actual_dir_list
     else:
