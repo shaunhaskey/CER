@@ -121,8 +121,6 @@ setenv LD_LIBRARY_PATH /task/imd/local64/include:$LD_LIBRARY_PATH
 setenv NETCDF_INCLUDE /task/imd/local64/include
 setenv NETCDF_LIB /task/imd/local64/lib
 
-
-
 #cd {PPPL_dir}
 #Remove, make, copy, goto, run, copy back
 rm /tmp/{tmp_work_name}/def_*.cdf
@@ -304,7 +302,7 @@ for tmp_prefix in file_prefix:
             model_fnames.append([tmp_prefix, i])
 idl_strs = []
 widths = np.linspace(0.01,0.12,5)
-base_time = 800
+base_time = 900
 #new_times = np.arange(len(widths)) + base_time
 shot_list = []; time_list = []
 max_val = 1.21
@@ -479,7 +477,7 @@ def write_job_file(d3d_actual_dir_list, pppl_actual_dir_list, job_id):
             with file(wrapper_fname,'w') as filehandle:
                 filehandle.writelines(wrapper.format(pppl_dir = run_dir))
             os.system('chmod +x {}'.format(wrapper_fname))
-
+        count+=1
 def modify_dat_file(d3d_actual_dir_list, pppl_actual_dir_list):
     if HOST=='venus':
         dir_list = d3d_actual_dir_list
@@ -524,11 +522,11 @@ if HOST=='portal':
     for i in set(shot_list):copy_files(i)
 
 fida_runs_fname = '/u/haskeysr/fida_runs'
-with file(fida_runs_fname,'w') as filehandle: filehandle.write('13\n')
+setpoint = 13
+with file(fida_runs_fname,'w') as filehandle: filehandle.write('{}\n'.format(setpoint))
 import cPickle as pickle
-
 pickle.dump(master_dict,file('/u/haskeysr/fida_sim_dict.pickle','w'))
-batch_launch_fida(master_dict['sims'], fida_runs_fname, setpoint = 5, id_string = job_id)
+batch_launch_fida(master_dict['sims'], fida_runs_fname, setpoint = setpoint, id_string = job_id)
 
 
 1/0
@@ -709,7 +707,6 @@ for i in range(3):
     print '{}los = [{}]'.format(axes[i], ','.join(['{:.4f}'.format(j) for j in loc[i]]))
 
 
-
 import numpy as np
 lens1 = np.array([-58.0452,238.6632,0.6822])
 loc1 = np.array([-133.64747, 172.84416, -1.4165587])
@@ -718,10 +715,12 @@ loc2 = np.array([-134.95745, 186.51464, -1.0956602])
 dr_loc = loc1 - loc2
 dr_lens = lens1 - lens2
 n = 120
-frac_vec = np.linspace(-0.25,2.5, n)
+frac_vec = np.linspace(-0.25,2.2, n)
 
 loc3 = [dr_loc[i]*frac_vec+loc2[i] for i in range(3)]
 lens3 = [dr_lens[i]*frac_vec+lens2[i] for i in range(3)]
+use_lens = lens3
+use_loc = loc3
 ids = ['m17','m24','m25','m26','m27','m28','m29','m31','m32']
 ids = ['m17','m24','m25','m26','m27','m28','m29','m31','m32']
 ids = ['m{}'.format(i) for i in range(1,n)]
@@ -731,15 +730,17 @@ for i in range(3):
     lens.append(np.linspace(lens1[i],lens2[i],n))
     loc.append(np.linspace(loc1[i],loc2[i],n))
 for i in range(3):
-    print '{}lens = [{}]'.format(axes[i], ','.join(['{:.4f}'.format(j) for j in lens[i]]))
+    print '{}lens = [{}]'.format(axes[i], ','.join(['{:.4f}'.format(j) for j in use_lens[i]]))
 for i in range(3):
-    print '{}los = [{}]'.format(axes[i], ','.join(['{:.4f}'.format(j) for j in loc[i]]))
+    print '{}los = [{}]'.format(axes[i], ','.join(['{:.4f}'.format(j) for j in use_loc[i]]))
 print 'mchords = [{}]'.format(','.join(["'{}'".format(i) for i in ids]))
 fig, ax = pt.subplots()
 ax.plot(lens3[0],lens3[1],'x')
 ax.plot(loc3[0],loc3[1],'x')
 ax.plot(lens[0],lens[1],'o')
 ax.plot(loc[0],loc[1],'o')
+phi = np.linspace(0,2.*np.pi)
+ax.plot(171*np.cos(phi),171*np.sin(phi))
 ax.set_xlim([-240,240])
 ax.set_ylim([-240,240])
 fig.canvas.draw();fig.show()
