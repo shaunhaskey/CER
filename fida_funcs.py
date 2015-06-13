@@ -210,3 +210,123 @@ def batch_launch_fida(master_dict, job_num_filename, setpoint = 5, id_string = '
 
 ################ JOB LAUNCHING DETAILS ###################
 ##
+def check_file_exists(fname, max_time = 10, interval = 0.1):
+    max_count = max_time / interval
+    count = 0
+    while (not os.path.isfile(fname)) or (count <max_count):
+        time_mod.sleep(interval)
+        print 'hello'
+        count += 1
+
+def create_dirs(shot_list, time_list, diag):
+    pppl_actual_dir_list = []
+    d3d_actual_dir_list = []
+    for shot,time in zip(shot_list, [int(tmp1) for tmp1 in time_list]):
+        pppl_actual_dir = r'{}/{}/{:05d}/{}/'.format(pppl_base_dir,shot, time, diag).replace('//','/') 
+        d3d_actual_dir = r'{}/{}/{:05d}/{}/'.format(d3d_base_dir,shot, time, diag).replace('//','/')
+        pppl_actual_dir_list.append(pppl_actual_dir)
+        d3d_actual_dir_list.append(d3d_actual_dir)
+
+        if os.path.exists(d3d_actual_dir):
+            os.system('rm -r {}'.format(d3d_actual_dir))
+
+        tmp = 'mkdir -p {}'.format(d3d_actual_dir)
+        master_dict['sims'][time]['dir_dict']['d3d_actual_dir'] = d3d_actual_dir
+        master_dict['sims'][time]['dir_dict']['pppl_actual_dir'] = pppl_actual_dir
+        print '==> making the directory, ', tmp
+        os.system(tmp)
+    return pppl_actual_dir_list, d3d_actual_dir_list
+
+
+def make_run_idl(shot_list, time_list, diag):
+    idl_input_file = r'{}/{}/idl_input_file'.format(d3d_base_dir,shot_list[0]).replace('//','/')
+    idl_output_log = r'{}/{}/idl_output_log'.format(d3d_base_dir,shot_list[0]).replace('//','/')
+    f90_overall = ''
+    d3d_prefida_overall = ''
+    for shot, time in zip(shot_list, time_list):
+        time_str = '{:05d}'.format(int(time))
+        f90_overall+=f90_txt.format(shot=shot, time = time_str, beam=beam,comment=comment, diag = diag)
+        d3d_prefida_overall+=d3d_input_prefida.format(shot=shot, time = time_str,)
+
+    print f90_overall
+    print d3d_prefida_overall
+    
+    with file(idl_input_file,'w') as filehandle:
+        tmp_txt = setup_txt2.format(f90_txt = f90_overall, d3d_input_prefida = d3d_prefida_overall)
+        print tmp_txt
+        filehandle.write(tmp_txt)
+
+    idl_text2 = "REPEAT BEGIN\nresult = FILE_TEST('{}')\nprint,result\nwait,1\nENDREP UNTIL result EQ 1\n@{}\nexit\n".format(idl_input_file,idl_input_file)
+    idl_input_file2 = idl_input_file+'2'
+    with file(idl_input_file2,'w') as filehandle:
+        filehandle.write(idl_text2)
+    #Run IDL to set everything up
+    file_is_there = False
+    time_mod.sleep(10)
+    while not os.path.isfile(idl_input_file):
+        time_mod.sleep(0.01)
+        print 'hello'
+
+    while not os.path.isfile(idl_input_file2):
+        time_mod.sleep(0.01)
+        print 'hello2'
+    time_mod.sleep(2)
+        
+    #time_mod.sleep(2)
+    os.system('idl < {} | tee {}'.format(idl_input_file2, idl_output_log))
+
+
+def write_job_file(d3d_actual_dir_list, pppl_actual_dir_list, job_id):
+    if HOST=='venus':
+        job_template = pbs_file_venus
+        run_dir_list = d3d_actual_dir_list
+    else:
+        job_template = pbs_file
+        run_dir_list = pppl_actual_dir_list
+    #Write the jobfile for qsub
+    count = 0
+    for d3d_actual_dir, run_dir in zip(d3d_actual_dir_list, run_dir_list):
+        with file('{}/jobfile.pbs'.format(d3d_actual_dir),'w') as filehandle:
+            filehandle.write(job_template.format(PPPL_dir=run_dir,input_file='def_inputs.dat',tmp_work_name='fida_{:d}'.format(count),job_id=job_id))
+        wrapper_fname = '{}/wrapper'.format(d3d_actual_dir)
+        if HOST=='portal':
+            with file(wrapper_fname,'w') as filehandle:
+                filehandle.writelines(wrapper.format(pppl_dir = run_dir))
+            os.system('chmod +x {}'.format(wrapper_fname))
+        count+=1
+
+def modify_dat_file(d3d_actual_dir_list, pppl_actual_dir_list):
+    if HOST=='venus':
+        dir_list = d3d_actual_dir_list
+    else:
+        dir_list = pppl_actual_dir_list
+    for d3d_actual_dir, actual_dir in zip(d3d_actual_dir_list, dir_list):
+        with file('{}def_inputs.dat'.format(d3d_actual_dir),'r') as filehandle:
+            fidasim_input = filehandle.readlines()
+        for i,line in enumerate(fidasim_input):
+            if line.find("result_dir")>=0:
+                line_num = +i
+        fidasim_input[line_num] = r"result_dir = '{}'".format(actual_dir)
+        with file('{}/def_inputs.dat'.format(d3d_actual_dir),'w') as filehandle:
+            filehandle.writelines(fidasim_input)
+
+
+
+def copy_files(shot):
+    #Copy everything across
+    os.system('rsync -avz --progress /u/haskeysr/FIDASIM/RESULTS/D3D/{} shaskey@portal.pppl.gov:{}'.format(shot,pppl_base_dir))
+
+def execute(pppl_actual_dir_list, HOST):
+    #Submit the job on the PPPL cluster
+    if HOST=='portal':
+        dir_list = pppl_actual_dir_list
+        cmd_template = r"ssh -t shaskey@portal.pppl.gov '{}/wrapper'"
+    else:
+        dir_list = d3d_actual_dir_list
+        cmd_template = r"qsub {}/jobfile.pbs"
+    for actual_dir in dir_list:
+        #cmd = r"ssh -t shaskey@portal.pppl.gov '{}/wrapper'".format(pppl_actual_dir).replace('//','/')
+        cmd = cmd_template.format(actual_dir).replace('//','/')
+        print '==>',cmd
+        os.system(cmd)
+
