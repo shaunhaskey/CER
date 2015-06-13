@@ -241,7 +241,7 @@ def create_dirs(shot_list, time_list, diag, pppl_base_dir, d3d_base_dir, master_
     return pppl_actual_dir_list, d3d_actual_dir_list
 
 
-def make_run_idl(shot_list, time_list, diag, d3d_base_dir, beam, comment):
+def make_run_idl_f90setup(shot_list, time_list, diag, d3d_base_dir, beam, comment):
     idl_input_file = r'{}/{}/idl_input_file'.format(d3d_base_dir,shot_list[0]).replace('//','/')
     idl_output_log = r'{}/{}/idl_output_log'.format(d3d_base_dir,shot_list[0]).replace('//','/')
     f90_overall = ''
@@ -255,7 +255,7 @@ def make_run_idl(shot_list, time_list, diag, d3d_base_dir, beam, comment):
     print d3d_prefida_overall
     
     with file(idl_input_file,'w') as filehandle:
-        tmp_txt = setup_txt2.format(f90_txt = f90_overall, d3d_input_prefida = d3d_prefida_overall)
+        tmp_txt = setup_txt2.format(f90_txt = f90_overall, d3d_input_prefida = '\n')
         print tmp_txt
         filehandle.write(tmp_txt)
 
@@ -277,6 +277,45 @@ def make_run_idl(shot_list, time_list, diag, d3d_base_dir, beam, comment):
         
     #time_mod.sleep(2)
     os.system('idl < {} | tee {}'.format(idl_input_file2, idl_output_log))
+
+
+
+def make_run_idl_prefida(shot_list, time_list, diag, d3d_base_dir, beam, comment):
+    idl_input_file = r'{}/{}/idl_input_file'.format(d3d_base_dir,shot_list[0]).replace('//','/')
+    idl_output_log = r'{}/{}/idl_output_log'.format(d3d_base_dir,shot_list[0]).replace('//','/')
+    f90_overall = ''
+    d3d_prefida_overall = ''
+    for shot, time in zip(shot_list, time_list):
+        time_str = '{:05d}'.format(int(time))
+        f90_overall+=f90_txt.format(shot=shot, time = time_str, beam=beam,comment=comment, diag = diag)
+        d3d_prefida_overall+=d3d_input_prefida.format(shot=shot, time = time_str,)
+
+    print f90_overall
+    print d3d_prefida_overall
+    with file(idl_input_file,'w') as filehandle:
+        tmp_txt = setup_txt2.format(f90_txt = '\n', d3d_input_prefida = d3d_prefida_overall)
+        print tmp_txt
+        filehandle.write(tmp_txt)
+    idl_text2 = "REPEAT BEGIN\nresult = FILE_TEST('{}')\nprint,result\nwait,1\nENDREP UNTIL result EQ 1\n@{}\nexit\n".format(idl_input_file,idl_input_file)
+    idl_input_file2 = idl_input_file+'2'
+    with file(idl_input_file2,'w') as filehandle:
+        filehandle.write(idl_text2)
+    #Run IDL to set everything up
+    file_is_there = False
+    time_mod.sleep(10)
+    while not os.path.isfile(idl_input_file):
+        time_mod.sleep(0.01)
+        print 'hello'
+
+    while not os.path.isfile(idl_input_file2):
+        time_mod.sleep(0.01)
+        print 'hello2'
+    time_mod.sleep(2)
+    #time_mod.sleep(2)
+    os.system('idl < {} | tee {}'.format(idl_input_file2, idl_output_log))
+
+
+
 
 
 def write_job_file(d3d_actual_dir_list, pppl_actual_dir_list, job_id, HOST):
@@ -333,3 +372,24 @@ def execute(pppl_actual_dir_list, HOST):
         print '==>',cmd
         os.system(cmd)
 
+def replace_value(input_lines, name, new_val):
+        for i,line in enumerate(input_lines):
+            if line.find(name)>=0:
+                line.replace('name','').lstrip(' ')[0] == '='
+                line_num = +i
+                print 'found line ', line[line_num]
+                break
+        input_lines[line_num] = r"{} = '{}'".format(name, new_val)
+        return input_lines
+
+
+def modify_d3d_input(HOME, master_dict):
+    shot = master_dict['settings']['new_shot']
+    for time, cur_dict in master_dict['sims'].iteritems():
+        print time, shot
+        fname = '{}/f90fidasim/{shot}/{time}/MAIN_ION330/def/d3d_input.pro'.format(HOME, shot=shot,time='{:05d}'.format(time))
+        print fname
+        with file(fname,'r') as filehandle: input_lines = filehandle.readlines()
+        for name, new_val in cur_dict['prefida_changes'].iteritems():
+            input_lines = replace_value(input_lines, name, new_val)
+        with file(fname,'w') as filehandle: filehandle.writelines(input_lines)

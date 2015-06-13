@@ -52,7 +52,7 @@ for tmp_prefix in file_prefix:
             model_fnames.append([tmp_prefix, i])
 idl_strs = []
 widths = np.linspace(0.01,0.12,2)
-base_time = 1100
+base_time = 1200
 #new_times = np.arange(len(widths)) + base_time
 shot_list = []; time_list = []
 max_val = 1.21
@@ -145,9 +145,17 @@ d3d_base_dir = r'/u/haskeysr/FIDASIM/RESULTS/D3D/'.replace('//','/')
 master_dict['settings']['pppl_base_dir'] = pppl_base_dir
 master_dict['settings']['d3d_base_dir'] = d3d_base_dir
 
-
+HOME = os.environ['HOME']
 pppl_actual_dir_list, d3d_actual_dir_list = FIDA.create_dirs(shot_list, time_list,diag, pppl_base_dir, d3d_base_dir, master_dict)
-FIDA.make_run_idl(shot_list, time_list, diag, d3d_base_dir, beam, comment)
+FIDA.make_run_idl_f90setup(shot_list, time_list, diag, d3d_base_dir, beam, comment)
+
+for i in master_dict['sims'].keys():master_dict['sims'][i]['prefida_changes'] = {'nx':100,'ny':101}
+
+FIDA.modify_d3d_input(HOME, master_dict)
+
+HOME + '/gaprofiles/f90fidasim/158676/01100/MAIN_ION330/def/'
+
+FIDA.make_run_idl_prefida(shot_list, time_list, diag, d3d_base_dir, beam, comment)
 job_id = 'fidasim'
 FIDA.write_job_file(d3d_actual_dir_list, pppl_actual_dir_list, job_id, HOST)
 if HOST=='portal':
