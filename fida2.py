@@ -5,41 +5,43 @@ Runs everything the whole way through including idl process at the start, and su
 SRH : 30March2015
 /u/stagnerl/FIDA/CGRAD/
 '''
+import pidly
 import os, shutil
 import time as time_mod
-import os
 import numpy as np
 import itertools as iter
 import fida_funcs as FIDA
 import cer_funcs as CER
-import numpy as np
 #import matplotlib.pyplot as pt
 import subprocess as sub
 from scipy.io import netcdf
+import cPickle as pickle
+
 #Should I remove those directories before doing anything else?
 #'/u/grierson/transp/ACFILE/blank_fi_1.cdf'
 
-offset = 0.1
-te_top = 3.0
-ti_top = 3.0
-ne_top = 4.0
-xsym = 0.95
-hwid = 0.05
+#Default pedestal parameters
 #core = [0.02, 0.001]
-core = [0.02]#, 0.001]
-edge = []#-0.02]
+HOST='venus' if os.environ['HOST'].find('venus')>=0 else 'portal'
 
-if os.environ['HOST'].find('venus')>=0: 
-    HOST='venus'
-else:
-    HOST='portal'
 #Open the file to write the new profiles to (for passing to IDL) -> move this to pIDLy?
-f = netcdf.netcdf_file('/u/haskeysr/test.nc','w', mmap=False)
-idl_string = FIDA.idl_header
 model_dir = '/u/haskeysr/gaprofiles/model/'
-model_shot = 158676
-model_time = 3220
-new_shot = 158676
+model_shot = 158676; model_time = 3220
+new_shot = 158676; base_time = 1300
+single = False
+
+model_dir = '/u/haskeysr/gaprofiles/155196/haskeysr/'
+#beam155196.02400
+model_shot = 155196; model_time = 2400
+new_shot = 155196; base_time = 500
+single = True
+
+# model_dir = '/u/haskeysr/gaprofiles/model/'
+# model_shot = 158676; model_time = 3220
+# new_shot = 158676; base_time = 8000
+# single = True
+
+#Check for existing filenames
 model_files = os.listdir(model_dir)
 model_fnames = []
 model_shot_str = '{}'.format(model_shot)
@@ -50,72 +52,16 @@ for tmp_prefix in file_prefix:
     for i in model_files:
         if (i.find(tmp_prefix)==0) and (i.find(model_shot_str)>=0) and (i.find(model_time_str)>=0):
             model_fnames.append([tmp_prefix, i])
-idl_strs = []
+#idl_strs = []
 widths = np.linspace(0.01,0.12,2)
-base_time = 1200
-#new_times = np.arange(len(widths)) + base_time
-shot_list = []; time_list = []
-max_val = 1.21
-npts = 121
-count = 0
+
 
 te_val_top_list = np.linspace(0.5,2.5,2)
+#new_times = np.arange(len(widths)) + base_time
 #ne_val_top_list = np.linspace(0.5,2.5,5)
-ne_val_top = 4.; te_val_top = 3.; ti_val_top = 3.
-for i, width in enumerate(widths):
-    for te_val_top in te_val_top_list:
-        new_time = count + base_time
-        master_dict['sims'][new_time] = {'dir_dict':{},'shot':new_time, 'profiles':{}}
-        print new_time, width
-        #cur_dir = '/u/haskeysr/gaprofiles/{}/{:05d}/'.format(new_shot,new_time)
-        cur_dir = '/u/haskeysr/gaprofiles/{}/'.format(new_shot)
-        master_dict['sims'][new_time]['dir_dict']['profiles'] = cur_dir
-        os.system('mkdir -p {}'.format(cur_dir))
-        #Copy the model shot but with the modified filenames. Data inside the files will be modified by idl soon....
-        for (tmp_prefix, tmp_fname) in model_fnames:
-            new_name = tmp_fname.replace(model_shot_str,'{}'.format(new_shot)).replace(model_time_str,'{:05d}'.format(new_time))
-            print tmp_prefix, tmp_fname, new_name
-            os.system('cp {}/{} {}/{}'.format(model_dir, tmp_fname, cur_dir,new_name ))
-        #Do the same for the g-file
-        os.system('cp {}/{} {}/{}'.format(model_dir, 'g{}.{:05d}'.format(model_shot,model_time), cur_dir,'g{}.{:05d}'.format(new_shot,new_time) ))
 
-        idl_string+=FIDA.idl_ind.format(dir=cur_dir,shot=new_shot,time=new_time,time_str='{:05d}'.format(new_time),tag='{}'.format(new_time))
-        idl_string+=FIDA.idl_bulk
-        ti_val_top = te_val_top
-        for ident, width_mult, top_val in zip(['ne', 'te', 'ti'], [1., 1., 2.], [ne_val_top, te_val_top, ti_val_top]):
-        #Generate the profiles
-            print ident, width_mult, top_val
-            x = np.linspace(0,max_val, npts)
-            y = CER.mtanh(x, top_val, offset, xsym, width*width_mult, len(core), len(edge), False, *(core + edge))
-            #y = CER.mtanh(x, top_val, offset, xsym, width*width_mult, core = core, edge = edge)
-            cur_var = '{}{}'.format(ident,new_time)
-            f.createDimension(cur_var,len(x))
-            prof = f.createVariable(cur_var,'float',(cur_var,))
-            prof[:] = +y
-            master_dict['sims'][new_time]['profiles'][ident] = {'data_y':+y,'data_x':+x,'settings':{'width':width,'xsym':xsym,'offset':offset,'pedestal_top':top_val,'core':core,'npts':npts, 'max_val':max_val,'edge':edge}}
-
-        if count==0:
-            f.createDimension('rho',len(x))
-            rho = f.createVariable('rho','float',('rho',))
-            rho[:] = +x
-            rho.units = ''
-        shot_list.append('{}'.format(new_shot))
-        time_list.append('{:05d}'.format(new_time))
-        count += 1
-        #idl_strs.append('''gap_model_dir = '{}'\ngap_model_shot = '{}'\ngap_model_time = {}\n'''.format(cur_dir,new_shot,new_time))
-
-time_mod.sleep(1)
-try_count = 0
-failed = True
-while failed or try_count>10:
-    try:
-        f.close()
-        failed = False
-        print 'success'
-    except IndexError:
-        try_count += 1
-        print 'failed'
-        time_mod.sleep(0.5)
+shot_list, time_list = FIDA.generate_dirs(widths, te_val_top_list, base_time, master_dict, new_shot, model_fnames, model_dir, model_shot, model_time, single = single)
+idl_string = FIDA.generate_profiles_nc(widths, te_val_top_list, base_time, master_dict, new_shot, model_fnames, model_time_str, single = single)
 
 f1 = '/u/haskeysr/idl_test.pro'
 f2 = '/u/haskeysr/idl_test2.pro'
@@ -130,51 +76,13 @@ os.system('idl < /u/haskeysr/idl_test2.pro')
 
 #Finished with the profiles at this point, now move on to the actual FIDASIM part
 
-#Settings
-diag = 'MAIN_ION330'
-beam = '330lt'
-comment = 'helloworld'
-master_dict['settings']['diag'] = diag
-master_dict['settings']['beam'] = beam
-master_dict['settings']['comment'] = comment
-
-#Important directories
-pppl_base_dir = r'/p/fida/shaskey/RESULTS/D3D/'.replace('//','/')
-d3d_base_dir = r'/u/haskeysr/FIDASIM/RESULTS/D3D/'.replace('//','/')
-
-master_dict['settings']['pppl_base_dir'] = pppl_base_dir
-master_dict['settings']['d3d_base_dir'] = d3d_base_dir
-
-HOME = os.environ['HOME']
-pppl_actual_dir_list, d3d_actual_dir_list = FIDA.create_dirs(shot_list, time_list,diag, pppl_base_dir, d3d_base_dir, master_dict)
-FIDA.make_run_idl_f90setup(shot_list, time_list, diag, d3d_base_dir, beam, comment)
-
-for i in master_dict['sims'].keys():master_dict['sims'][i]['prefida_changes'] = {'nx':100,'ny':101}
-
-FIDA.modify_d3d_input(HOME, master_dict)
-
-HOME + '/gaprofiles/f90fidasim/158676/01100/MAIN_ION330/def/'
-
-FIDA.make_run_idl_prefida(shot_list, time_list, diag, d3d_base_dir, beam, comment)
-job_id = 'fidasim'
-FIDA.write_job_file(d3d_actual_dir_list, pppl_actual_dir_list, job_id, HOST)
-if HOST=='portal':
-    FIDA.modify_dat_file(d3d_actual_dir_list, pppl_actual_dir_list, HOST)
-#What to do about the results that may already exist in the remote directory?
-if HOST=='portal': 
-    for i in set(shot_list):FIDA.copy_files(i)
-fida_runs_fname = '/u/haskeysr/fida_runs'
-setpoint = 13
-with file(fida_runs_fname,'w') as filehandle: filehandle.write('{}\n'.format(setpoint))
-import cPickle as pickle
-pickle.dump(master_dict,file('/u/haskeysr/fida_sim_dict.pickle','w'))
-1/0
-FIDA.batch_launch_fida(master_dict['sims'], fida_runs_fname, setpoint = setpoint, id_string = job_id)
-
+#Create and idl process
+grid_settings = {'xmin':35,'xmax':95,'nr_halo':5000000}
+for i in master_dict['sims'].keys():master_dict['sims'][i]['prefida_changes'] = grid_settings
+FIDA.generate_run_FIDASIM(master_dict, time_list, shot_list, grid_settings, idl = None, HOST='venus')
 
 
 1/0
-
 
 import numpy as np
 lens1 = np.array([-58.0452,238.6632,0.6822])
@@ -183,7 +91,7 @@ lens2 = np.array([-58.045200, 238.66320, 0.68220000])
 loc2 = np.array([-134.95745, 186.51464, -1.0956602])
 dr_loc = loc1 - loc2
 dr_lens = lens1 - lens2
-n = 120
+n = 80
 frac_vec = np.linspace(-0.25,2.2, n)
 
 loc3 = [dr_loc[i]*frac_vec+loc2[i] for i in range(3)]
@@ -229,4 +137,30 @@ addf90fidasim
 .compile writeg
 .compile /u/haskeysr/gaprofiles_compute_profile_beam.pro
 
+'''
+
+
+'''
+% Compiled module: BST_PARAM_WAVELENGTH.
+% LOAD_ALL_CCD_DATA: Invalid chord identifier: m17
+% GET_CCD_CHORD_DATA: Error in external call to LOAD_ALL_CCD_DATA
+% Tag name WL is undefined for structure <Anonymous>.
+% Execution halted at:  BST_CERVIEW_GET_LAMBDA0  512 /u/grierson/idlpros/b-stark/bst_cerview/bst_cerview.pro
+%                       BST_CHORD_PARAM_WAVELENGTH  263 /u/grierson/idlpros/b-stark/bst_chord_param/bst_chord_param.pro
+%                       BST_CHORD_PARAM   814 /u/grierson/idlpros/b-stark/bst_chord_param/bst_chord_param.pro
+%                       GET_MAINION_GEOM   61 /u/haskeysr/FIDASIM/D3D/d3d_chords.pro
+%                       D3D_CHORDS        276 /u/haskeysr/FIDASIM/D3D/d3d_chords.pro
+%                       D3D_ROUTINES       21 /u/grierson/FIDASIM/D3D/d3d_routines.pro
+%                       PREFIDA           939 /u/haskeysr/FIDASIM/prefida.pro
+%                       $MAIN$          
+% Tag name LENS is undefined for structure NULL.
+% Execution halted at: GET_MAINION_GEOM   62
+   /u/haskeysr/FIDASIM/D3D/d3d_chords.pro
+%                      D3D_CHORDS        276
+   /u/haskeysr/FIDASIM/D3D/d3d_chords.pro
+%                      D3D_ROUTINES       21
+   /u/grierson/FIDASIM/D3D/d3d_routines.pro
+%                      PREFIDA           939 /u/haskeysr/FIDASIM/prefida.pro
+%                      $MAIN$          
+IDL>  
 '''

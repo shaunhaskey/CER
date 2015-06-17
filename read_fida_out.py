@@ -7,13 +7,17 @@ import numpy
 import scipy
 from scipy.optimize import curve_fit
 
+shot = 158676
+shot = 155196
 start_time = 520
 end_time = 530
 start_time = 600
 start_time = 900
 end_time = 925
-start_time = 1000
-end_time = 1005
+start_time = 1200
+end_time = 1225
+start_time = 500
+end_time = 501
 offset = 0
 jump = 5
 offset = 0
@@ -130,13 +134,12 @@ def plot_profiles():
     for num in rel_times:#range(start_time,end_time):
         print num
         HOME = os.environ['HOME']
-        dir =  HOME + '/158676/00001/MAIN_ION330/'
-        dir =  HOME + '/FIDASIM/RESULTS/D3D/158676/{:05d}/MAIN_ION330/'.format(num)
+        dir =  HOME + '/FIDASIM/RESULTS/D3D/{}/{:05d}/MAIN_ION330/'.format(shot, num) 
         run_id = 'def'
         #inputs, neutrals, spectra, weights = get_data(dir, run_id = 'def', plot = False)
         #halo = +spectra.variables['halo'].data
-        #a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(num, num))
-        a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(900,900 ))
+        a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/g{}.{:05d}'.format(shot, num, shot, num))
+        #a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(900,900 ))
         b = a['AuxQuantities']
         rgrid,zgrid = np.meshgrid(b['R'],b['Z'])
         r_new = np.linspace(1.4, 2.5, 300)
@@ -153,8 +156,8 @@ def plot_profiles():
         print num
         for plot_key,ax_tmp in zip(['ti','te','ne'],ax):
             print plot_key, ax_tmp
-            #fname = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/d{}158676.{:05d}'.format(num,plot_key, num)
-            fname = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/d{}158676.{:05d}'.format(900,plot_key, 900)
+            fname = '/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/d{}{}.{:05d}'.format(shot, num,plot_key, shot, num)
+            #fname = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/d{}158676.{:05d}'.format(900,plot_key, 900)
             dat_obj = OMFITtree.OMFITidlSav(fname)['{}_str'.format(plot_key)]
             if plot_key=='ne':
                 tmp = 'DENS'
@@ -189,7 +192,7 @@ for num in rel_times:
     HOME = os.environ['HOME']
     #num = 200
     dir =  HOME + '/158676/00001/MAIN_ION330/'
-    dir =  HOME + '/FIDASIM/RESULTS/D3D/158676/{:05d}/MAIN_ION330/'.format(num)
+    dir =  HOME + '/FIDASIM/RESULTS/D3D/{}/{:05d}/MAIN_ION330/'.format(shot, num)
     run_id = 'def'
     try:
         inputs, neutrals, spectra, weights = get_data(dir, run_id = 'def', plot = False)
@@ -209,10 +212,10 @@ for num in rel_times:
 
         halo = +spectra.variables['halo'].data
         plot_key = 'ti'
-        #a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(num, num))
-        a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(900, 900))
-        prof_name = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/d{}158676.{:05d}'.format(num,plot_key, num)
-        prof_name = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/d{}158676.{:05d}'.format(900,plot_key, 900)
+        a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/g{}.{:05d}'.format(shot, num,shot, num))
+        #a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(900, 900))
+        prof_name = '/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/d{}{}.{:05d}'.format(shot, num,plot_key, shot, num)
+        #prof_name = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/d{}158676.{:05d}'.format(900,plot_key, 900)
         prof_dat = OMFITtree.OMFITidlSav(prof_name)['{}_str'.format(plot_key)]
         prof_flux = prof_dat['{}_{}'.format(sav_key, plot_key.upper())]
         prof = prof_dat[plot_key.upper()]
@@ -248,23 +251,23 @@ for num in rel_times:
         wave = wave*10.  #Angstroms
         #halo[0,:]
         plot_spectrum = False
+        plot_spectra = True
         ti_list = []; vel_list = []
-        
-        fig_tmp, ax_tmp = pt.subplots(nrows=5,ncols=5, sharex = True)
-        ax_tmp = ax_tmp.flatten()
-        for i in range(halo.shape[0]):
-            if i%5==0:
-                ax_tmp_in = ax_tmp[i/5]
-                plot_spectrum_tmp = True
-            else:
-                ax_tmp_in = None
-                plot_spectrum_tmp = False
-            ti, vel = calc_ti_vel(halo[i,:], wave, plot=plot_spectrum_tmp, ax_tmp = ax_tmp_in)
-            if i%5==0:
-                ax_tmp[i/5].text(ax_tmp[i/5].get_xlim()[0],0,'{:.3f}'.format(r_probes[i/5]),verticalalignment='bottom',horizontalalignment='left')
-            ti_list.append(ti)
-            vel_list.append(vel)
-        fig_tmp.canvas.draw();fig_tmp.show()
+        if plot_spectra:
+            fig_tmp, ax_tmp = pt.subplots(nrows=5,ncols=5, sharex = True)
+            ax_tmp = ax_tmp.flatten()
+            for i in range(halo.shape[0]):
+                if i%5==0:
+                    ax_tmp_in = ax_tmp[i/5]
+                    plot_spectrum_tmp = True
+                else:
+                    ax_tmp_in = None
+                    plot_spectrum_tmp = False
+                ti, vel = calc_ti_vel(halo[i,:], wave, plot=plot_spectrum_tmp, ax_tmp = ax_tmp_in)
+                if i%5==0:
+                    ax_tmp[i/5].text(ax_tmp[i/5].get_xlim()[0],0,'{:.3f}'.format(r_probes[i]),verticalalignment='bottom',horizontalalignment='left')
+                ti_list.append(ti)
+                vel_list.append(vel)
         ax_probes[0].plot(r_probes,ti_list, marker='.',linestyle='-')
         ax_flux[num%5].plot(flux_probe,ti_list, marker='.',linestyle='-')
         ax_flux[num%5].plot(prof_flux, prof,'b-')
@@ -279,15 +282,15 @@ for num in rel_times:
         fit_coeffs_orig.append(coeff_orig)
 
         fit_coeffs.append(coeff)
+        fig_tmp.suptitle('Top:{:.3f},Width:{:.3f}'.format(fit_coeffs[-1][0], fit_coeffs[-1][3]))
+        fig_tmp.tight_layout()
+        fig_tmp.canvas.draw();fig_tmp.show()
         y2 = mtanh_wrapper(flux_probe, *coeff)
         y3 = mtanh_wrapper(prof_flux, *coeff_orig)
         ax_flux[num%5].plot(flux_probe, y2,'-.')
         ax_flux[num%5].plot(prof_flux, y3,'r--')
         ax_flux2[int((num-start_time)/5)].plot(flux_probe, y2)
         ax_flux2[int((num-start_time)/5)].plot(prof_flux, y3,'r--')
-        fig_tmp.suptitle('Top:{:.3f},Width:{:.3f}'.format(fit_coeffs[-1][0], fit_coeffs[-1][3]))
-        fig_tmp.tight_layout()
-        fig_tmp.canvas.draw()
         ax_probes[1].plot(r_probes,vel_list,'-o')
         ax_probes[0].set_ylim([0,4])
         ax_probes[0].set_xlim([1.45, 2.32])
