@@ -612,46 +612,10 @@ def get_los_data(dir='/u/haskeysr/FIDASIM/RESULTS/D3D/155196/00500/MAIN_ION330/'
     neutrals = netcdf.netcdf_file(dir + '{}_neutrals.cdf'.format(run_id),'r',mmap = False)
     halo_dens = neutrals.variables['halodens'].data
     #weights = netcdf.netcdf_file(dir + '{}_fida_weights.cdf'.format(run_id),'r',mmap = False)
+    print 'hello'
+    print 'hello2'
+    print 'hello3'
+    1/0
     return halo_dens, los_wght
 
-
-class interpolate_grid_profiles():
-    def __init__(self, shot, time, run_id = 'def'):
-        self.shot = shot
-        self.time = time
-        self.run_id = run_id
-        HOME = os.environ['HOME']
-        dir =  HOME + '/FIDASIM/RESULTS/D3D/{}/{:05d}/MAIN_ION330/'.format(shot, time) 
-        self.eqdsk = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/{}/g{}.{:05d}'.format(shot, time, run_id, shot, time))
-        self.rgrid, self.zgrid = np.meshgrid(self.eqdsk['AuxQuantities']['R'],self.eqdsk['AuxQuantities']['Z'])
-
-    def flux_values(self, r_values, z_values, use_rho = True,):
-        self.r_values = r_values
-        self.z_values = z_values
-        if use_rho:
-            self.interp_key = 'RHOpRZ'
-            self.sav_key = 'RHO'
-        else:
-            self.interp_key = 'PSIRZ_NORM'
-            self.sav_key = 'PSI'
-        print 'interpolating to find rho at R,Z'
-        self.flux_values = scipy.interpolate.griddata((self.rgrid.flatten(),self.zgrid.flatten()),self.eqdsk['AuxQuantities'][self.interp_key].flatten(),(self.r_values,self.z_values))
-
-    def get_profile_RZ(self,):
-        self.data_out = {}
-        for plot_key in (['ti','te','ne'],ax):
-            print plot_key
-            fname = '/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/{}/d{}{}.{:05d}'.format(self.shot, self.time,self.run_id, plot_key, self.shot, self.time)
-            dat_obj = OMFITtree.OMFITidlSav(fname)['{}_str'.format(plot_key)]
-            if plot_key=='ne':
-                tmp = 'DENS'
-            else:
-                tmp = plot_key.upper()
-            print dat_obj.keys()
-            print dat_obj['RHO_{}'.format(tmp)]
-            dat_psi = dat_obj['{}_{}'.format(self.sav_key,tmp)]
-            dat_dat = dat_obj[tmp]
-            dat_interp = np.interp(flux_new, dat_psi, dat_dat,)
-            self.data_out[plot_key] = data_interp.copy()
-        return self.data_out
 
