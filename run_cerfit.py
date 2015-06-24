@@ -328,6 +328,12 @@ def read_extra_cmds():
 
     lower_time = 0
     upper_time = 10000
+    all_chans = ','.join(chords).rstrip(',')
+    print all_chans
+    for i in range(len(lines)):
+        if lines[i].find('all')>=0:
+            lines[i] = lines[i].replace('all',all_chans)
+            print lines[i]
     for i in lines:
         if len(i)>=3:
             i = i.split(':')
@@ -347,6 +353,7 @@ def read_extra_cmds():
                     extra_cmds[chrd] = cmd
                 else:
                     extra_cmds[chrd] += '{}'.format(cmd)
+                rerun_whole_shot[chrd] = True
             if i[0]=='command':
                 chrds = i[1].strip(' ').split(',')
                 #chrd = i[1].strip(' ')
@@ -357,6 +364,7 @@ def read_extra_cmds():
                         extra_cmds[chrd] = cmd
                     else:
                         extra_cmds[chrd] += '{}'.format(cmd)
+                    rerun_whole_shot[chrd] = True
             if i[0]=='kill':
                 chrds = i[1].strip(' ').split(',')
                 kill_time = i[2].rstrip('\n').strip(' ')
@@ -543,7 +551,7 @@ else:
             beams.extend(beams_tmp)
 
 npeaks =  read_in_npeaks(chords)
-
+rerun_whole_shot = {i:False for i in chords}
 
 extra_cmds, kill_times, modify_times, lower_time, upper_time, orig_lines = read_extra_cmds()
 print "Lower time: {}, upper time: {}".format(lower_time, upper_time)

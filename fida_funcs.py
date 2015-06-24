@@ -506,9 +506,10 @@ def generate_run_FIDASIM(master_dict, time_list, shot_list, grid_settings, idl =
     setpoint = 13
     with file(fida_runs_fname,'w') as filehandle: filehandle.write('{}\n'.format(setpoint))
     pickle.dump(master_dict,file('/u/haskeysr/fida_sim_dict.pickle','w'))
+    1/0
     batch_launch_fida(master_dict['sims'], fida_runs_fname, setpoint = setpoint, id_string = job_id)
 
-def generate_dirs(widths, te_val_top_list, base_time, master_dict, new_shot, model_fnames, model_dir, model_shot, model_time, single = False):
+def generate_dirs(widths, base_time, master_dict, new_shot, model_fnames, model_dir, model_shot, model_time, single = False, te_val_top_list = None, ti_val_top_list = None, ne_val_top_list = None):
     model_time_str = '{:05d}'.format(model_time)
     model_shot_str = '{}'.format(model_shot)
     new_time = base_time
@@ -530,23 +531,32 @@ def generate_dirs(widths, te_val_top_list, base_time, master_dict, new_shot, mod
         cur_dir = '/u/haskeysr/gaprofiles/{}/'.format(new_shot)
         master_dict['sims'][new_time]['dir_dict']['profiles'] = cur_dir
     else:
+        if ne_val_top_list == None:
+            ne_val_top_list = [4]
+        if ti_val_top_list == None:
+            ti_val_top_list = [3]
+        if te_val_top_list == None:
+            te_val_top_list = [3]
+
         for i, width in enumerate(widths):
             for te_val_top in te_val_top_list:
-                master_dict['sims'][new_time] = {'dir_dict':{},'shot':new_shot, 'profiles':{}}
-                print new_time, width
-                cur_dir = '/u/haskeysr/gaprofiles/{}/'.format(new_shot)
-                master_dict['sims'][new_time]['dir_dict']['profiles'] = cur_dir
-                os.system('mkdir -p {}'.format(cur_dir))
+                for ti_val_top in ti_val_top_list:
+                    for ne_val_top in ne_val_top_list:
+                        master_dict['sims'][new_time] = {'dir_dict':{},'shot':new_shot, 'profiles':{}}
+                        print new_time, width
+                        cur_dir = '/u/haskeysr/gaprofiles/{}/'.format(new_shot)
+                        master_dict['sims'][new_time]['dir_dict']['profiles'] = cur_dir
+                        os.system('mkdir -p {}'.format(cur_dir))
 
-                copy_files(base_time, cur_dir,)
-                #Copy model profiles but modify names
-                #idl code to modify the shot details
-                shot_list.append('{}'.format(new_shot))
-                time_list.append('{:05d}'.format(new_time))
-                new_time += 1
+                        copy_files(base_time, cur_dir,)
+                        #Copy model profiles but modify names
+                        #idl code to modify the shot details
+                        shot_list.append('{}'.format(new_shot))
+                        time_list.append('{:05d}'.format(new_time))
+                        new_time += 1
     return shot_list, time_list
 
-def generate_profiles_nc(widths, te_val_top_list, base_time, master_dict, new_shot, model_fnames, model_time_str, single = False):
+def generate_profiles_nc(widths, base_time, master_dict, new_shot, model_fnames, model_time_str, single = False, force_ti_eq_te = True, te_val_top_list = None, ti_val_top_list = None, ne_val_top_list = None):
     if single:
         idl_string = '.compile writeg\n'
         new_time = base_time
@@ -557,39 +567,47 @@ def generate_profiles_nc(widths, te_val_top_list, base_time, master_dict, new_sh
         idl_string = FIDA.idl_header
         new_time = base_time
         f = netcdf.netcdf_file('/u/haskeysr/test.nc','w', mmap=False)
-        ne_val_top = 4.; te_val_top = 3.; ti_val_top = 3.
+        if ne_val_top_list == None:
+            ne_val_top_list = [4]
+        if ti_val_top_list == None:
+            ti_val_top_list = [3]
+        if te_val_top_list == None:
+            te_val_top_list = [3]
         max_val = 1.21; npts = 121
-        offset = 0.1; te_top = 3.0; ti_top = 3.0
-        ne_top = 4.0; xsym = 0.95; hwid = 0.05
+        offset = 0.1; xsym = 0.95; hwid = 0.05
         core = [0.02]#, 0.001]
         edge = []#-0.02]
         for i, width in enumerate(widths):
             for j, te_val_top in enumerate(te_val_top_list):
-                #Fix the te and ti temperatures
-                cur_dir = '/u/haskeysr/gaprofiles/{}/'.format(new_shot)
-                ti_val_top = te_val_top
-                #Create the new profiles and put in he .nc file
-                for ident, width_mult, top_val in zip(['ne', 'te', 'ti'], [1., 1., 2.], [ne_val_top, te_val_top, ti_val_top]):
-                    #Generate the profiles
-                    print ident, width_mult, top_val
-                    x = np.linspace(0,max_val, npts)
-                    y = CER.mtanh(x, top_val, offset, xsym, width*width_mult, len(core), len(edge), False, *(core + edge))
-                    cur_var = '{}{}'.format(ident,new_time)
-                    f.createDimension(cur_var,len(x))
-                    prof = f.createVariable(cur_var,'float',(cur_var,))
-                    prof[:] = +y
-                    master_dict['sims'][new_time]['profiles'][ident] = {'data_y':+y,'data_x':+x,'settings':{'width':width,'xsym':xsym,'offset':offset,'pedestal_top':top_val,'core':core,'npts':npts, 'max_val':max_val,'edge':edge}}
-                #Special case to include rho
-                if i==0 and j==0:
-                    f.createDimension('rho',len(x))
-                    rho = f.createVariable('rho','float',('rho',))
-                    rho[:] = +x
-                    rho.units = ''
-                idl_string+=idl_ind.format(dir=cur_dir,shot=new_shot,time=new_time,time_str='{:05d}'.format(new_time),tag='{}'.format(new_time))
-                idl_string+=idl_bulk
-                #Create the shot and time list that needs to be executed
-                #idl_strs.append('''gap_model_dir = '{}'\ngap_model_shot = '{}'\ngap_model_time = {}\n'''.format(cur_dir,new_shot,new_time))
-                new_time += 1
+                for k, ti_val_top in enumerate(ti_val_top_list):
+f                    for l, ne_val_top in enumerate(ne_val_top_list):
+                        #Fix the te and ti temperatures
+                        cur_dir = '/u/haskeysr/gaprofiles/{}/'.format(new_shot)
+
+                        #Force te_top = ti_top
+                        if force_ti_eq_te: ti_val_top = te_val_top
+                        #Create the new profiles and put in he .nc file
+                        for ident, width_mult, top_val in zip(['ne', 'te', 'ti'], [1., 1., 2.], [ne_val_top, te_val_top, ti_val_top]):
+                            #Generate the profiles
+                            print ident, width_mult, top_val
+                            x = np.linspace(0,max_val, npts)
+                            y = CER.mtanh(x, top_val, offset, xsym, width*width_mult, len(core), len(edge), False, *(core + edge))
+                            cur_var = '{}{}'.format(ident,new_time)
+                            f.createDimension(cur_var,len(x))
+                            prof = f.createVariable(cur_var,'float',(cur_var,))
+                            prof[:] = +y
+                            master_dict['sims'][new_time]['profiles'][ident] = {'data_y':+y,'data_x':+x,'settings':{'width':width,'xsym':xsym,'offset':offset,'pedestal_top':top_val,'core':core,'npts':npts, 'max_val':max_val,'edge':edge}}
+                        #Special case to include rho
+                        if new_time==base_time:
+                            f.createDimension('rho',len(x))
+                            rho = f.createVariable('rho','float',('rho',))
+                            rho[:] = +x
+                            rho.units = ''
+                        idl_string+=idl_ind.format(dir=cur_dir,shot=new_shot,time=new_time,time_str='{:05d}'.format(new_time),tag='{}'.format(new_time))
+                        idl_string+=idl_bulk
+                        #Create the shot and time list that needs to be executed
+                        #idl_strs.append('''gap_model_dir = '{}'\ngap_model_shot = '{}'\ngap_model_time = {}\n'''.format(cur_dir,new_shot,new_time))
+                        new_time += 1
         time_mod.sleep(1)
         try_count = 0
         failed = True

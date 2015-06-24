@@ -27,14 +27,14 @@ HOST='venus' if os.environ['HOST'].find('venus')>=0 else 'portal'
 #Open the file to write the new profiles to (for passing to IDL) -> move this to pIDLy?
 model_dir = '/u/haskeysr/gaprofiles/model/'
 model_shot = 158676; model_time = 3220
-new_shot = 158676; base_time = 1300
+new_shot = 158676; base_time = 1400
 single = False
 
-model_dir = '/u/haskeysr/gaprofiles/155196/haskeysr/'
-#beam155196.02400
-model_shot = 155196; model_time = 2400
-new_shot = 155196; base_time = 500
-single = True
+#model_dir = '/u/haskeysr/gaprofiles/155196/haskeysr/'
+##beam155196.02400
+#model_shot = 155196; model_time = 2400
+#new_shot = 155196; base_time = 500
+#single = True
 
 # model_dir = '/u/haskeysr/gaprofiles/model/'
 # model_shot = 158676; model_time = 3220
@@ -57,11 +57,16 @@ widths = np.linspace(0.01,0.12,2)
 
 
 te_val_top_list = np.linspace(0.5,2.5,2)
+#0.5 -> 10 are the 'possible' ranges for ne at the top of the pedestal
+ne_val_top_list = np.linspace(1,8,3)
+ti_val_top_list = None
 #new_times = np.arange(len(widths)) + base_time
 #ne_val_top_list = np.linspace(0.5,2.5,5)
 
-shot_list, time_list = FIDA.generate_dirs(widths, te_val_top_list, base_time, master_dict, new_shot, model_fnames, model_dir, model_shot, model_time, single = single)
-idl_string = FIDA.generate_profiles_nc(widths, te_val_top_list, base_time, master_dict, new_shot, model_fnames, model_time_str, single = single)
+shot_list, time_list = FIDA.generate_dirs(widths, base_time, master_dict, new_shot, model_fnames, model_dir, model_shot, model_time, single = single, te_val_top_list = te_val_top_list, ti_val_top_list = ti_val_top_list, ne_val_top_list = ne_val_top_list)
+
+
+idl_string = FIDA.generate_profiles_nc(widths, base_time, master_dict, new_shot, model_fnames, model_time_str, single = single, te_val_top_list = te_val_top_list, ti_val_top_list = ti_val_top_list, ne_val_top_list = ne_val_top_list)
 
 f1 = '/u/haskeysr/idl_test.pro'
 f2 = '/u/haskeysr/idl_test2.pro'
