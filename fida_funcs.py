@@ -11,6 +11,9 @@ import scipy
 import shutil
 import itertools as iter
 import cer_funcs as CER
+from scipy.optimize import curve_fit
+import matplotlib.pyplot as pt
+import pyMARS.generic_funcs as gen
 
 idl_setup = '''.compile /u/grierson/idlpros/add/addanon
 .compile /u/grierson/idlpros/add/addbrian
@@ -630,7 +633,331 @@ def get_los_data(dir='/u/haskeysr/FIDASIM/RESULTS/D3D/155196/00500/MAIN_ION330/'
     neutrals = netcdf.netcdf_file(dir + '{}_neutrals.cdf'.format(run_id),'r',mmap = False)
     halo_dens = neutrals.variables['halodens'].data
     #weights = netcdf.netcdf_file(dir + '{}_fida_weights.cdf'.format(run_id),'r',mmap = False)
+    print 'hello'
+    print 'hello2'
+    print 'hello3'
+    1/0
     return halo_dens, los_wght
+
+def gauss(x, *p):
+    A, mu, sigma = p
+    return A*np.exp(-(x-mu)**2/(2.*sigma**2))
+
+def calc_ti_vel(data, wave, plot = True, ax_tmp = None):
+    hist = data/10. # convert to ph/s-m^2/sR-A
+    lambda0 = 6561.0
+    # ;; Now convert to CCD counts for fitting
+    # ;; We measure counts in a time interval.
+    # ;; The total count rate CR = TOTAL(counts[pix])/tinteg
+    # ;; The total brightness B = CR/calib
+    # ;; Then radiance is counts[pix]/TOTAL(counts[pix])*B/D.
+    # ;; Or    R = counts/(tinteg*calib*disp)
+    # ;; 
+    # ;; We then do this backwards with 
+    # ;; counts = R*tinteg*calib*disp
+
+    tinteg = 2.5e-3 # s
+    calib = 1.0e-7  # (count rate) / ph/s-cm**2-sR
+    calib /= (100.0)**2 # (count rate) / ph/s-m**2-sR
+    disp = 0.18 #;; A/pix
+    r_to_counts = tinteg*calib*disp
+    counts = hist*r_to_counts
+
+    #Initial guess for Gaussian fit
+    p0 = [np.max(counts), wave[np.argmax(counts)], 20]
+    print p0
+    #Fit with a Gaussian
+    coeff, var_matrix = curve_fit(gauss, wave, counts, p0=p0)
+
+    # Get the fitted curve
+    hist_fit = gauss(wave, *coeff)
+    print np.max(hist_fit), np.min(hist_fit), coeff
+    if plot:
+        if ax_tmp==None:
+            import matplotlib.pyplot as pt
+            fig, ax = pt.subplots()
+        else:
+            ax = ax_tmp
+        ax.plot(wave, counts)#, label='Test data')
+        ax.plot(wave, hist_fit)#, label='Fitted data')
+        #ax.legend(loc='best')
+        if ax_tmp==None:
+            fig.canvas.draw();fig.show()
+    # Finally, lets get the fitting parameters, i.e. the mean and standard deviation:
+
+    print 'Fitted mean = ', coeff[1]
+    print 'Fitted standard deviation = ', coeff[2]
+
+    #Now extract temperature and rotation velocity out of the data
+    c = 2.9979e8
+    # Temperature
+    eV_to_J = 1.6022e-19#6.24150934e18
+    md = 3.3452e-27
+    sigma = coeff[2]
+    ti = (sigma/lambda0)**2 * md * c**2
+    ti /= eV_to_J
+    ti /= 1.e3
+    vlos = c*(coeff[1]-lambda0)/lambda0 *1.e-3
+
+    #1.e-3 * eV_to_J #;; J->keV
+    #ti /= 1.e3 ;; keV
+    print ti, vlos
+    print '########## finished ###############'
+    return ti, vlos
+
+
+def calc_mean_L(L_frm_lens, val):
+    dL = L_frm_lens[1]-L_frm_lens[0]
+    rel_ind = np.invert(np.isnan(val))
+    rel_pts = L_frm_lens[rel_ind]
+    rel_vals = val[rel_ind]
+    tot_area = np.sum(dL*rel_vals)
+    rel_vals_prob = val[rel_ind]/ tot_area
+    mean_L = np.sum(rel_pts*rel_vals_prob*dL)
+    mean_dens = np.interp(mean_L, rel_pts, rel_vals)
+    #mean_dens = rel_vals[np.argmin(np.abs(rel_pts - mean_L))]
+    std_L = np.sqrt(np.sum(rel_vals_prob * (rel_pts - mean_L)**2))
+    print mean_L, mean_dens, tot_area
+    return mean_L, mean_dens, std_L
+
+def convert_L_to_rho(rho, L, vals):
+    rel_ind = np.invert(np.isnan(rho))
+    rel_L = L[rel_ind]
+    rel_rho = rho[rel_ind]
+    #for i in vals:
+
+class fidasim_results():
+    def __init__(self,directory, shot, time, run_id='def'):
+        self.directory = directory
+        self.run_id = run_id
+        self.shot = shot
+        self.time = time
+        self.get_fidasim_output()
+        self.get_grid_geom()
+        self.profiles_grid = interpolate_grid_profiles(self.shot,self.time)
+        self.profiles_grid.get_flux_values(np.sqrt(self.x_grid2**2 + self.y_grid2**2),self.z_grid)
+        c, d = self.profiles_grid.get_profile_RZ()
+
+    def get_fidasim_output(self,):
+        '''Open the relevant netcdf files
+
+        SRH: 23June2015
+        '''
+        self.inputs = netcdf.netcdf_file(self.directory + '{}_inputs.cdf'.format(self.run_id),'r',mmap = False)
+        self.spectra = netcdf.netcdf_file(self.directory + '{}_spectra.cdf'.format(self.run_id),'r',mmap = False)
+        self.neutrals = netcdf.netcdf_file(self.directory + '{}_neutrals.cdf'.format(self.run_id),'r',mmap = False)
+        #self.los_wght = self.inputs.variables['los_wght'].data
+        #self.halo_dens = self.neutrals.variables['halodens'].data
+        #weights = netcdf.netcdf_file(self.directory + '{}_fida_weights.cdf'.format(self.run_id),'r',mmap = False)
+
+    def get_grid_geom(self,):
+        '''Extract the useful data from the input file on the grid, and transform various quantities
+
+        SRH : 23June2015
+        '''
+        self.origin = self.inputs.variables['origin'].data
+        for i in ['x','y','z','r','u','v']: setattr(self,'{}_grid'.format(i),self.inputs.variables['{}_grid'.format(i)].data)
+        self.alpha = self.inputs.variables['alpha'].data
+        self.x_grid2, self.y_grid2,self.z_grid2 =  self.transform(self.x_grid, self.y_grid, self.z_grid, self.origin, self.alpha)
+        for i in ['x','y','z']: setattr(self,'{}lens'.format(i),self.inputs.variables['{}lens'.format(i)].data)
+        for i in ['x','y','z']: setattr(self,'{}los'.format(i),self.inputs.variables['{}los'.format(i)].data)
+        self.xlens2, self.ylens2, self.zlens2 = self.transform(self.xlens, self.ylens, self.zlens, self.origin, self.alpha)
+        self.xlos2, self.ylos2, self.zlos2 =  self.transform(self.xlos, self.ylos, self.zlos, self.origin, self.alpha)
+        
+    def transform(self, x_grid, y_grid, z_grid, origin, alpha, unit_conversion=1./100):
+        '''Useful function for transforming between the two co-ordinate systems that are used by FIDASIM
+
+        SRH: 23June2015
+        '''
+        phi_tmp = np.arctan2(y_grid, x_grid)
+        r_tmp = np.sqrt(x_grid**2 + y_grid**2)
+        #Values in m
+        x_grid2 = (r_tmp*np.cos(phi_tmp + alpha) + origin[0])*unit_conversion
+        y_grid2 = (r_tmp*np.sin(phi_tmp + alpha) + origin[1])*unit_conversion
+        z_grid2 = (z_grid + origin[2])*unit_conversion
+        return x_grid2, y_grid2,z_grid2
+
+    def fit_gaussians(self,ncols = 5, decimation = 5, plot = True):
+        '''Take the artificial spectra, and fit gaussians to get velocity and temperature measurements
+
+        SRH: 23June2015
+        '''
+        halo = +self.spectra.variables['halo'].data
+        wave = +self.spectra.variables['lambda'].data * 10 #Angstroms
+        nrows = int(np.ceil((len(self.xlens)/float(decimation))/ncols))
+        if plot:
+            fig_tmp, ax_tmp = pt.subplots(nrows=nrows,ncols=5, sharex = True,)
+            ax_tmp = ax_tmp.flatten()
+        self.ti_list = []; self.vel_list = []
+        count = 0
+        for i in range(halo.shape[0]):
+            if plot:
+                if ((i%decimation)==0):
+                    ax_tmp_in = ax_tmp[count]; plot_spectrum_tmp = True; count += 1
+                else:
+                    ax_tmp_in = None; plot_spectrum_tmp = False
+            else:
+                ax_tmp_in = None; plot_spectrum_tmp = False
+            ti, vel = calc_ti_vel(halo[i,:], wave, plot= plot_spectrum_tmp,ax_tmp = ax_tmp_in)
+            #if ((i%5)==0):
+            #    ax_tmp[i/5].text(ax_tmp[i/5].get_xlim()[0],0,'{:.3f}'.format(r_probes[i]),verticalalignment='bottom',horizontalalignment='left')
+            self.ti_list.append(ti); self.vel_list.append(vel)
+        if plot:
+            fig_tmp.canvas.draw(); fig_tmp.show()
+
+    def plot_LOS_densities(self, n_levels = 4, use_level=3, plot_quants = None):
+        self.mean_L_list = []; self.mean_dens_list = []
+        self.mean_L_std_list = []; self.rho_vals_list = []
+        self.clr_cycle = gen.new_color_cycle(0,len(self.xlens))
+
+        if plot_quants == None: plot_quants = ['rho_grid','te','dene','ti']
+        self.peaks = {i:{'x':[],'y':[]} for i in plot_quants}
+
+        ncols = np.max([len(plot_quants), n_levels])
+        fig, ax = pt.subplots(ncols = ncols, nrows = 3, sharex = True)
+
+        for i in range(0, len(self.xlens)):
+            i = len(self.xlens) - i-1
+            print i
+            z_pts = np.linspace(self.zlens[i],self.zlens[i] + 2.5*(self.zlos[i]- self.zlens[i]),800)
+            y_pts = np.linspace(self.ylens[i],self.ylens[i] + 2.5*(self.ylos[i]- self.ylens[i]),800)
+            x_pts = np.linspace(self.xlens[i],self.xlens[i] + 2.5*(self.xlos[i]- self.xlens[i]),800)
+            self.rho = scipy.interpolate.interpn((self.z_grid[:,0,0],self.y_grid[0,:,0], self.x_grid[0,0,:]),
+                                                 self.inputs.variables['rho_grid'].data, 
+                                                 (z_pts, y_pts, x_pts),
+                                                 bounds_error = False, method='linear')
+            #ax_tmp.plot(rho,q)
+            self.level_dens = []
+            #Interpolate the level densities along the lines of sight
+            for level in range(n_levels):
+                self.level_dens.append(scipy.interpolate.interpn((self.z_grid[:,0,0],self.y_grid[0,:,0], self.x_grid[0,0,:]),
+                                          self.neutrals.variables['halodens'].data[level,:,:,:],
+                                          (z_pts, y_pts, x_pts),
+                                          bounds_error = False, method='linear'))
+
+            max_val = np.max(self.level_dens[use_level][np.invert(np.isnan(self.level_dens[use_level]))])
+            R = np.sqrt((x_pts-x_pts[0])**2 + (y_pts-y_pts[0])**2 + (z_pts-z_pts[0])**2)
+            dist_lens = R - R[0]
+
+            tmp = calc_mean_L(dist_lens, self.level_dens[use_level])
+            self.mean_L_list.append(tmp[0])
+            self.mean_dens_list.append(tmp[1])
+            self.mean_L_std_list.append(tmp[2])
+
+            ax[1,use_level].errorbar(self.mean_L_list[-1], self.mean_dens_list[-1], xerr=tmp[2]/2,color=self.clr_cycle(i))
+            ax[1,use_level].plot(self.mean_L_list[-1], self.mean_dens_list[-1], 'x',color=self.clr_cycle(i))
+
+            vals = [self.mean_L_list[-1] - tmp[2]/2,self.mean_L_list[-1], self.mean_L_list[-1] + tmp[2]/2]
+            self.rho_vals_list.append(np.interp(vals, dist_lens, self.rho))
+
+            for quant,ax_tmp, ax_tmp6 in zip(plot_quants,ax[0,:],ax[2,:]):
+                self.q = scipy.interpolate.interpn((self.z_grid[:,0,0],self.y_grid[0,:,0], self.x_grid[0,0,:]),
+                                                   self.inputs.variables[quant].data, 
+                                                   (z_pts, y_pts, x_pts),
+                                                   bounds_error = False, method='linear')
+                tmp_y = self.q*self.level_dens[use_level]/max_val
+                linewidth=0.3
+                ax_tmp.plot(dist_lens, self.q, color = self.clr_cycle(i), linewidth=linewidth)
+                ax_tmp.set_title(quant)
+                ax_tmp6.plot(dist_lens, tmp_y, color=self.clr_cycle(i), linewidth=linewidth)
+                valid = np.invert(np.isnan(self.level_dens[use_level]))
+                self.peaks[quant]['y'].append(np.max(tmp_y[valid]))
+                self.peaks[quant]['x'].append(dist_lens[valid][np.argmax(tmp_y[valid])])
+            for ax_tmp, cur_lev in zip(ax[1,:], self.level_dens):ax_tmp.plot(R - R[0], cur_lev, color=self.clr_cycle(i), linewidth=linewidth)
+            for i in range(len(plot_quants)):
+                ax[-1,i].plot(self.peaks[plot_quants[i]]['x'],self.peaks[plot_quants[i]]['y'],'o-')
+                ax[-1,i].set_xlabel('Distance frm lens')
+        pt.subplots_adjust(left=0.03, right=0.97, top=0.95, bottom=0.05)
+        fig.canvas.draw();fig.show()
+
+    def actual_chord_locations(self,):
+        '''This interpolates the 16 new coil locations so that they
+        are evenly spaced between the old m17 and m20. This allows us
+        to show the actual coil locations against the simulated ones
+
+        SRH: 23June2015
+        '''
+        n_chrds = 16
+        m17los = [-133.64747, 172.84416, -1.4165587]
+        m20los = [-134.95745, 186.51464, -1.0956602]
+        m17lens = [-58.045200, 238.66320, 0.68220000]
+        m20lens = [-58.045200,  238.66320, 0.68220000]
+        xlos_chords,ylos_chords,zlos_chords = [np.linspace(m17los[i],m20los[i],n_chrds)/100 for i in range(3)]
+        xlens_chords,ylens_chords,zlens_chords = [np.linspace(m17lens[i],m20lens[i],n_chrds)/100 for i in range(3)]
+
+        # xlos_chords,ylos_chords,zlos_chords = [np.linspace(-133.64747, -134.95745, n_chrds)/100,
+        #                                        np.linspace(172.84416, 186.51464 , n_chrds)/100,
+        #                                        np.linspace(-1.4165587, -1.0956602,  n_chrds)/100]
+
+        # xlens_chords,ylens_chords,zlens_chords = [np.linspace(-58.045200, -58.045200, n_chrds)/100,
+        #                                           np.linspace(238.66320, 238.66320, n_chrds)/100,
+        #                                           np.linspace(0.68220000, 0.68220000, n_chrds)/100]
+        #This is a cheat to interpolate onto the existing chords because of inerpn returning nan's
+        #Need to double check this at some point
+        self.xlos_chords2 = np.interp(xlos_chords,self.xlos2,self.xlos)
+        self.ylos_chords2 = np.interp(ylos_chords,self.ylos2,self.ylos)
+        self.zlos_chords2 = np.interp(zlos_chords,self.zlos2,self.zlos)
+
+        self.rho_chrds = scipy.interpolate.interpn((self.z_grid[:,0,0],self.y_grid[0,:,0], self.x_grid[0,0,:]),
+                                              self.inputs.variables['rho_grid'].data, 
+                                              (self.zlos_chords2, self.ylos_chords2, self.xlos_chords2),
+                                              bounds_error = False, method='linear')
+
+        self.rho_chrds2 = scipy.interpolate.interpn((self.z_grid[:,0,0],self.y_grid[0,:,0], self.x_grid[0,0,:]),
+                                               self.inputs.variables['rho_grid'].data, 
+                                               (self.zlos, self.ylos, self.xlos),
+                                               bounds_error = False, method='linear')
+
+    def plot_profiles_responses(self,plot_items = None):
+        '''Make the plots of the profiles along with the observed profiles, and 'smearing'
+
+        SRH: 23June2015
+        '''
+        self.actual_chord_locations()
+        if plot_items == None: plot_items = ['te','ti','ne', 'TOR_ROT']
+        fig, ax = pt.subplots(ncols = len(plot_items), sharex = True, figsize=(20,4))
+        for ind, name in enumerate(plot_items):
+            #Get the profile from the idl save file (already loaded)
+            rho_vals = getattr(self.profiles_grid, name+'_rho')
+            dat_vals = getattr(self.profiles_grid, name)
+            #Cycle through the chords
+            for i in range(0, len(self.xlens)):
+                ch_te = np.interp(self.rho_vals_list[i][1], rho_vals, dat_vals)
+                ax[ind].plot(self.rho_vals_list[i],[ch_te, ch_te, ch_te],  color=self.clr_cycle(i), linewidth=2)
+                ax[ind].plot(self.rho_vals_list[i][1], ch_te, 'o',  color=self.clr_cycle(i),)
+
+                #correct for the indexing problem from before.....
+                i = len(self.xlens) - i-1
+                ax[ind].plot(self.rho_chrds2[i], ch_te, 'xk')
+                ax[ind].set_title(name); ax[ind].set_xlabel('rho')
+            for rho_cur in self.rho_chrds:ax[ind].axvline(rho_cur)
+            ax[ind].plot(rho_vals, dat_vals, '-', linewidth=0.2)
+            if name=='ti':ax[ind].plot(self.rho_chrds2,np.array(self.ti_list)*1., color='k',marker='x',linestyle='-')
+            if name=='TOR_ROT':ax[ind].plot(self.rho_chrds2,np.array(self.vel_list)*1000., color='k',marker='x',linestyle='-')
+        ax[1].set_xlim([0,1.2])
+        pt.subplots_adjust(left=0.03, right=0.97, top=0.95, bottom=0.05)
+        fig.canvas.draw();fig.show()
+
+    def mayavi_plots(self,):
+        from mayavi import mlab
+        mlab.figure(fgcolor=(0, 0, 0), bgcolor=(1, 1, 1))
+        #mlab.mesh(x_grid, y_grid, z_grid, scalars=S, colormap='YlGnBu', )
+        #mlab.mesh(x_grid, y_grid, z_grid, colormap='YlGnBu', )
+        for i in range(0,self.x_grid2.shape[0],5):
+            print i
+            #mlab.mesh(x_grid[i,:,:], y_grid[i,:,:], z_grid[i,:,:], scalars = b.flux_values[i,:,:], colormap='jet', vmin=0,vmax = 1.5 , opacity = 0.5)
+            clr_dat = self.inputs.variables['rho_grid'].data[i,:,:]
+            #clr_dat = b.flux_values[i,:,:]
+            #mlab.mesh(u_grid[i,:,:]/100., v_grid[i,:,:]/100., z_grid[i,:,:]/100., scalars = clr_dat, colormap='jet', vmin=0,vmax = 1.5 , opacity = 0.5)
+            mlab.mesh(self.x_grid2[i,:,:], self.y_grid2[i,:,:], self.z_grid2[i,:,:], scalars = clr_dat, colormap='jet', vmin=0,vmax = 1.5 , opacity = 0.5)
+        for phi in [330, 330+180]:
+            phi = np.deg2rad(-360+90-phi)
+            mlab.mesh(self.profiles_grid.rgrid*np.cos(phi),self.profiles_grid.rgrid*np.sin(phi), self.profiles_grid.zgrid, scalars = self.profiles_grid.eqdsk_flux, colormap='jet', vmin=0,vmax = 1.5, opacity = 0.5)
+        x_orig,y_orig,z_orig = self.inputs.variables['origin'].data
+        b = self.inputs.variables['rho_grid'].data.copy()
+        for i in range(0,self.inputs.variables['xlens'].shape[0],5):
+           mlab.plot3d([self.xlens2[i],self.xlos2[i]],[self.ylens2[i], self.ylos2[i]],[self.zlens2[i],self.zlos2[i]], tube_radius = 0.5/100)
+        mlab.show()
 
 
 class interpolate_grid_profiles():
@@ -639,13 +966,17 @@ class interpolate_grid_profiles():
         self.time = time
         self.run_id = run_id
         HOME = os.environ['HOME']
-        dir =  HOME + '/FIDASIM/RESULTS/D3D/{}/{:05d}/MAIN_ION330/'.format(shot, time) 
-        self.eqdsk = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/{}/g{}.{:05d}'.format(shot, time, run_id, shot, time))
+        self.HOME = HOME
+        self.eqdsk = OMFITtree.OMFITeqdsk(filename=HOME + '/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/{}/g{}.{:05d}'.format(shot, time, run_id, shot, time))
         self.rgrid, self.zgrid = np.meshgrid(self.eqdsk['AuxQuantities']['R'],self.eqdsk['AuxQuantities']['Z'])
 
-    def flux_values(self, r_values, z_values, use_rho = True,):
+    def get_flux_values(self, r_values, z_values, use_rho = True,):
         self.r_values = r_values
         self.z_values = z_values
+        self.inp_shape = r_values.shape
+        self.r_values_flat = self.r_values.flatten()
+        self.z_values_flat = self.z_values.flatten()
+
         if use_rho:
             self.interp_key = 'RHOpRZ'
             self.sav_key = 'RHO'
@@ -653,23 +984,36 @@ class interpolate_grid_profiles():
             self.interp_key = 'PSIRZ_NORM'
             self.sav_key = 'PSI'
         print 'interpolating to find rho at R,Z'
-        self.flux_values = scipy.interpolate.griddata((self.rgrid.flatten(),self.zgrid.flatten()),self.eqdsk['AuxQuantities'][self.interp_key].flatten(),(self.r_values,self.z_values))
-
+        self.eqdsk_flux = self.eqdsk['AuxQuantities'][self.interp_key]
+        self.flux_values = scipy.interpolate.griddata((self.rgrid.flatten(),self.zgrid.flatten()),self.eqdsk_flux.flatten(),(self.r_values_flat,self.z_values_flat))
+        self.flux_values = self.flux_values.reshape(self.inp_shape)
+        
     def get_profile_RZ(self,):
         self.data_out = {}
-        for plot_key in (['ti','te','ne'],ax):
+        self.data_out_surf = {}
+        for plot_key in ['ti','te','ne', 'trot']:
             print plot_key
-            fname = '/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/{}/d{}{}.{:05d}'.format(self.shot, self.time,self.run_id, plot_key, self.shot, self.time)
+            fname = self.HOME + '/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/{}/d{}{}.{:05d}'.format(self.shot, self.time,self.run_id, plot_key, self.shot, self.time)
+            if plot_key=='trot':
+                plot_key = 'TOR_ROT'
             dat_obj = OMFITtree.OMFITidlSav(fname)['{}_str'.format(plot_key)]
             if plot_key=='ne':
-                tmp = 'DENS'
+                tmp1 = 'DENS'
+                tmp2 = 'DENS'
+            elif plot_key=='TOR_ROT':
+                tmp1 = 'TOR_ROT'
+                tmp2 = 'V_TOR_ROT'
             else:
-                tmp = plot_key.upper()
+                tmp1 = plot_key.upper()
+                tmp2 = plot_key.upper()
             print dat_obj.keys()
-            print dat_obj['RHO_{}'.format(tmp)]
-            dat_psi = dat_obj['{}_{}'.format(self.sav_key,tmp)]
-            dat_dat = dat_obj[tmp]
-            dat_interp = np.interp(flux_new, dat_psi, dat_dat,)
-            self.data_out[plot_key] = data_interp.copy()
-        return self.data_out
-
+            #print dat_obj['RHO_{}'.format(tmp1)]
+            dat_psi = dat_obj['{}_{}'.format(self.sav_key,tmp1)]
+            dat_dat = dat_obj[tmp2]
+            setattr(self,plot_key,dat_dat)
+            setattr(self,plot_key+'_rho',dat_psi)
+            dat_interp = np.interp(self.flux_values, dat_psi, dat_dat,)
+            dat_interp_surf = np.interp(self.eqdsk_flux, dat_psi, dat_dat,)
+            self.data_out[plot_key] = dat_interp.copy()
+            self.data_out_surf[plot_key] = dat_interp_surf.copy()
+        return self.data_out, self.data_out_surf
