@@ -112,8 +112,8 @@ rm log
 unbuffer /u/haskeysr/FIDASIM/fidasim {input_file} >& log
 echo -n 'Ended job at : ' ; date
 echo " "
-echo -n 'Copying files back to proper place'
-cp -a /tmp/{tmp_work_name}/* {PPPL_dir}
+echo -n 'Move files back to proper place'
+mv /tmp/{tmp_work_name}/* {PPPL_dir}
 echo -n 'Finished'
 exit
 '''
@@ -470,7 +470,7 @@ def modify_d3d_input(HOME, master_dict):
             input_lines = replace_value(input_lines, name, new_val)
         with file(fname,'w') as filehandle: filehandle.writelines(input_lines)
 
-def generate_run_FIDASIM(master_dict, time_list, shot_list, grid_settings, idl = None, HOST='venus'):
+def generate_run_FIDASIM(master_dict, time_list, shot_list, grid_settings, idl = None, HOST='venus', setpoint = 10):
     if idl==None: idl = pidly.IDL('idl')
 
     #Settings
@@ -506,10 +506,8 @@ def generate_run_FIDASIM(master_dict, time_list, shot_list, grid_settings, idl =
     if HOST=='portal': 
         for i in set(shot_list):copy_files(i)
     fida_runs_fname = HOME + '/fida_runs'
-    setpoint = 13
     with file(fida_runs_fname,'w') as filehandle: filehandle.write('{}\n'.format(setpoint))
-    pickle.dump(master_dict,file('/u/haskeysr/fida_sim_dict.pickle','w'))
-    1/0
+    pickle.dump(master_dict,file(d3d_base_dir + '{}/{}_{}-{}_fida_sim_dict.pickle'.format(shot_list[0],shot_list[0], time_list[0], time_list[-1]),'w'))
     batch_launch_fida(master_dict['sims'], fida_runs_fname, setpoint = setpoint, id_string = job_id)
 
 def generate_dirs(widths, base_time, master_dict, new_shot, model_fnames, model_dir, model_shot, model_time, single = False, te_val_top_list = None, ti_val_top_list = None, ne_val_top_list = None):
@@ -518,12 +516,17 @@ def generate_dirs(widths, base_time, master_dict, new_shot, model_fnames, model_
     new_time = base_time
     shot_list = []; time_list = []
     def copy_files(new_time, cur_dir,):
+        print '===='
         for (tmp_prefix, tmp_fname) in model_fnames:
             new_name = tmp_fname.replace(model_shot_str,'{}'.format(new_shot)).replace(model_time_str,'{:05d}'.format(new_time))
             print tmp_prefix, tmp_fname, new_name
-            os.system('cp {}/{} {}/{}'.format(model_dir, tmp_fname, cur_dir,new_name))
+            cmd = 'cp {}/{} {}/{}'.format(model_dir, tmp_fname, cur_dir,new_name)
+            print cmd
+            os.system(cmd)
         #Do the same for the g-file
-        os.system('cp {}/{} {}/{}'.format(model_dir, 'g{}.{:05d}'.format(model_shot,model_time), cur_dir,'g{}.{:05d}'.format(new_shot,new_time) ))
+        cmd = 'cp {}/{} {}/{}'.format(model_dir, 'g{}.{:05d}'.format(model_shot,model_time), cur_dir,'g{}.{:05d}'.format(new_shot,new_time) )
+        print cmd
+        os.system(cmd)
        
     if single:
         shot_list = [new_shot]; time_list = [base_time]
@@ -551,7 +554,7 @@ def generate_dirs(widths, base_time, master_dict, new_shot, model_fnames, model_
                         master_dict['sims'][new_time]['dir_dict']['profiles'] = cur_dir
                         os.system('mkdir -p {}'.format(cur_dir))
 
-                        copy_files(base_time, cur_dir,)
+                        copy_files(new_time, cur_dir,)
                         #Copy model profiles but modify names
                         #idl code to modify the shot details
                         shot_list.append('{}'.format(new_shot))
@@ -567,7 +570,7 @@ def generate_profiles_nc(widths, base_time, master_dict, new_shot, model_fnames,
         idl_string+=idl_ind_single.format(dir=cur_dir,shot=new_shot,time=new_time,time_str='{:05d}'.format(new_time),tag='{}'.format(new_time))
         idl_string+=idl_bulk_single
     else:
-        idl_string = FIDA.idl_header
+        idl_string = idl_header
         new_time = base_time
         f = netcdf.netcdf_file('/u/haskeysr/test.nc','w', mmap=False)
         if ne_val_top_list == None:
@@ -583,7 +586,7 @@ def generate_profiles_nc(widths, base_time, master_dict, new_shot, model_fnames,
         for i, width in enumerate(widths):
             for j, te_val_top in enumerate(te_val_top_list):
                 for k, ti_val_top in enumerate(ti_val_top_list):
-f                    for l, ne_val_top in enumerate(ne_val_top_list):
+                    for l, ne_val_top in enumerate(ne_val_top_list):
                         #Fix the te and ti temperatures
                         cur_dir = '/u/haskeysr/gaprofiles/{}/'.format(new_shot)
 

@@ -17,6 +17,7 @@ import subprocess as sub
 from scipy.io import netcdf
 import cPickle as pickle
 
+HOME = os.environ['HOME']
 #Should I remove those directories before doing anything else?
 #'/u/grierson/transp/ACFILE/blank_fi_1.cdf'
 
@@ -53,39 +54,58 @@ for tmp_prefix in file_prefix:
         if (i.find(tmp_prefix)==0) and (i.find(model_shot_str)>=0) and (i.find(model_time_str)>=0):
             model_fnames.append([tmp_prefix, i])
 #idl_strs = []
-widths = np.linspace(0.01,0.12,2)
-
-
-te_val_top_list = np.linspace(0.5,2.5,2)
+widths = np.linspace(0.01, 0.12, 5)
+te_val_top_list = np.linspace(0.5, 2.5, 5)
 #0.5 -> 10 are the 'possible' ranges for ne at the top of the pedestal
-ne_val_top_list = np.linspace(1,8,3)
+ne_val_top_list = np.linspace(1, 8, 5)
 ti_val_top_list = None
+
+fnames = ['beam','dimp','dne','dte','dti','dtrot','g']
+total_simuls = len(widths)*len(te_val_top_list)*len(ne_val_top_list)
+for i in range(base_time, base_time+total_simuls):
+    cmd = 'rm {home}/gaprofiles/{shot}/{ftype}{shot}.{time_string:05d}'.format(home=HOME,shot=new_shot,ftype='{'+','.join(fnames) + '}',time_string = i)
+    #cmd = 'rm {home}/gaprofiles/{shot}/{ftype}{shot}.{range_string}'.format(home=HOME,shot=new_shot,ftype=i,range_string = '{'+'{:05}..{:05}'.format(base_time, base_time + total_simuls)+'}')
+    print cmd
+    os.system(cmd)
+    cmd = 'rm -r {home}/gaprofiles/f90fidasim/{shot}/{time_string:05d}'.format(home=HOME,shot=new_shot, time_string = i)
+    print cmd
+    os.system(cmd)
+    cmd = 'rm -r {home}/FIDASIM/RESULTS/D3D/{shot}/{time_string:05d}'.format(home=HOME,shot=new_shot, time_string = i)
+    print cmd
+    os.system(cmd)
 #new_times = np.arange(len(widths)) + base_time
 #ne_val_top_list = np.linspace(0.5,2.5,5)
 
 shot_list, time_list = FIDA.generate_dirs(widths, base_time, master_dict, new_shot, model_fnames, model_dir, model_shot, model_time, single = single, te_val_top_list = te_val_top_list, ti_val_top_list = ti_val_top_list, ne_val_top_list = ne_val_top_list)
 
-
 idl_string = FIDA.generate_profiles_nc(widths, base_time, master_dict, new_shot, model_fnames, model_time_str, single = single, te_val_top_list = te_val_top_list, ti_val_top_list = ti_val_top_list, ne_val_top_list = ne_val_top_list)
 
-f1 = '/u/haskeysr/idl_test.pro'
-f2 = '/u/haskeysr/idl_test2.pro'
-with file(f1,'w') as filehandle:filehandle.write(idl_string)
-idl_text2 = '@{}\nexit\n'.format('/u/haskeysr/idl_test.pro')
-with file(f2,'w') as filehandle:
-    filehandle.write(idl_text2)
-FIDA.check_file_exists(f1, max_time = 10, interval = 0.1)
-FIDA.check_file_exists(f2, max_time = 10, interval = 0.1)
-time_mod.sleep(4)
-os.system('idl < /u/haskeysr/idl_test2.pro')
+idl = pidly.IDL('idl')
+
+# f1 = '/u/haskeysr/idl_test.pro'
+# f2 = '/u/haskeysr/idl_test2.pro'
+# with file(f1,'w') as filehandle:filehandle.write(idl_string)
+# idl_text2 = '@{}\nexit\n'.format('/u/haskeysr/idl_test.pro')
+# with file(f2,'w') as filehandle:
+#     filehandle.write(idl_text2)
+# FIDA.check_file_exists(f1, max_time = 10, interval = 0.1)
+# FIDA.check_file_exists(f2, max_time = 10, interval = 0.1)
+# time_mod.sleep(4)
+# print '***===***'
+
+idl_string_new = idl_string.replace('exit','')
+for i in idl_string_new.split('\n'):
+    print i
+    idl(i)
+print '***===***'
+#os.system('idl < /u/haskeysr/idl_test2.pro')
 
 #Finished with the profiles at this point, now move on to the actual FIDASIM part
 
 #Create and idl process
 grid_settings = {'xmin':35,'xmax':95,'nr_halo':5000000}
 for i in master_dict['sims'].keys():master_dict['sims'][i]['prefida_changes'] = grid_settings
-FIDA.generate_run_FIDASIM(master_dict, time_list, shot_list, grid_settings, idl = None, HOST='venus')
-
+FIDA.generate_run_FIDASIM(master_dict, time_list, shot_list, grid_settings, idl = idl, HOST='venus', setpoint = 15)
 
 1/0
 

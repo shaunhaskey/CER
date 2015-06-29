@@ -8,7 +8,7 @@ import scipy
 from scipy.optimize import curve_fit
 
 shot = 158676
-shot = 155196
+#shot = 155196
 start_time = 520
 end_time = 530
 start_time = 600
@@ -16,15 +16,16 @@ start_time = 900
 end_time = 925
 start_time = 1200
 end_time = 1225
-start_time = 500
-end_time = 501
+start_time =1400
+end_time = start_time + 125
 offset = 0
 jump = 5
 offset = 0
 jump = 1
 rel_times = range(start_time+offset, end_time,jump)
-import cPickle as pickle
-master_dict = pickle.load(file('/u/haskeysr/fida_sim_dict.pickle','r'))
+#import cPickle as pickle
+#master_dict = pickle.load(file('/u/haskeysr/fida_sim_dict.pickle','r'))
+#master_dict = pickle.load(file('/u/haskeysr/fida_sim_dict.pickle','r'))
 
 def gauss(x, *p):
     A, mu, sigma = p
@@ -125,10 +126,14 @@ def calc_ti_vel(data, wave, plot = True, ax_tmp = None):
     return ti, vlos
 
 print 'hello world'
+nrows = 5
+ncols = 5
+n_plots = nrows * ncols
 fig_probes, ax_probes = pt.subplots(ncols = 5, sharex = True, sharey=True)
-fig_flux, ax_flux = pt.subplots(ncols = 5, sharex = True, sharey = True)
-fig_flux2, ax_flux2 = pt.subplots(ncols = 5, sharex = True, sharey = True)
-
+fig_flux, ax_flux = pt.subplots(ncols = ncols, nrows = nrows, sharex = True, sharey = True)
+fig_flux2, ax_flux2 = pt.subplots(ncols = ncols, nrows = nrows, sharex = True, sharey = True)
+ax_flux2 = ax_flux2.flatten()
+ax_flux = ax_flux.flatten()
 def plot_profiles():
     fig, ax = pt.subplots(nrows = 3, sharex = True)
     for num in rel_times:#range(start_time,end_time):
@@ -184,7 +189,7 @@ def mtanh_wrapper(x,*p):
     return y
 
 
-plot_profiles()
+#plot_profiles()
 
 fit_coeffs = []
 fit_coeffs_orig = []
@@ -251,28 +256,28 @@ for num in rel_times:
         wave = wave*10.  #Angstroms
         #halo[0,:]
         plot_spectrum = False
-        plot_spectra = True
+        plot_spectra = False
         ti_list = []; vel_list = []
         if plot_spectra:
             fig_tmp, ax_tmp = pt.subplots(nrows=5,ncols=5, sharex = True)
             ax_tmp = ax_tmp.flatten()
-            for i in range(halo.shape[0]):
-                if i%5==0:
-                    ax_tmp_in = ax_tmp[i/5]
-                    plot_spectrum_tmp = True
-                else:
-                    ax_tmp_in = None
-                    plot_spectrum_tmp = False
-                ti, vel = calc_ti_vel(halo[i,:], wave, plot=plot_spectrum_tmp, ax_tmp = ax_tmp_in)
-                if i%5==0:
-                    ax_tmp[i/5].text(ax_tmp[i/5].get_xlim()[0],0,'{:.3f}'.format(r_probes[i]),verticalalignment='bottom',horizontalalignment='left')
-                ti_list.append(ti)
-                vel_list.append(vel)
+        for i in range(halo.shape[0]):
+            if (i%5==0) and plot_spectra:
+                ax_tmp_in = ax_tmp[i/5]
+                plot_spectrum_tmp = True
+            else:
+                ax_tmp_in = None
+                plot_spectrum_tmp = False
+            ti, vel = calc_ti_vel(halo[i,:], wave, plot=plot_spectrum_tmp, ax_tmp = ax_tmp_in)
+            if (i%5==0) and plot_spectra:
+                ax_tmp[i/5].text(ax_tmp[i/5].get_xlim()[0],0,'{:.3f}'.format(r_probes[i]),verticalalignment='bottom',horizontalalignment='left')
+            ti_list.append(ti)
+            vel_list.append(vel)
         ax_probes[0].plot(r_probes,ti_list, marker='.',linestyle='-')
-        ax_flux[num%5].plot(flux_probe,ti_list, marker='.',linestyle='-')
-        ax_flux[num%5].plot(prof_flux, prof,'b-')
-        ax_flux2[int((num-start_time)/5.)].plot(flux_probe,ti_list, marker='.',linestyle='-')
-        ax_flux2[int((num-start_time)/5.)].plot(prof_flux, prof,'b-')
+        ax_flux[num%n_plots].plot(flux_probe,ti_list, marker='.',linestyle='-')
+        ax_flux[num%n_plots].plot(prof_flux, prof,'b-')
+        ax_flux2[int((num-start_time)/n_plots)].plot(flux_probe,ti_list, marker='.',linestyle='-')
+        ax_flux2[int((num-start_time)/n_plots)].plot(prof_flux, prof,'b-')
         guess = [1.5, 0.2, 0.9, 0.05,]
         coeff, var_matrix = curve_fit(mtanh_wrapper, flux_probe, ti_list, p0=guess,)
 
@@ -282,15 +287,16 @@ for num in rel_times:
         fit_coeffs_orig.append(coeff_orig)
 
         fit_coeffs.append(coeff)
-        fig_tmp.suptitle('Top:{:.3f},Width:{:.3f}'.format(fit_coeffs[-1][0], fit_coeffs[-1][3]))
-        fig_tmp.tight_layout()
-        fig_tmp.canvas.draw();fig_tmp.show()
+        if plot_spectra:
+            fig_tmp.suptitle('Top:{:.3f},Width:{:.3f}'.format(fit_coeffs[-1][0], fit_coeffs[-1][3]))
+            fig_tmp.tight_layout()
+            fig_tmp.canvas.draw();fig_tmp.show()
         y2 = mtanh_wrapper(flux_probe, *coeff)
         y3 = mtanh_wrapper(prof_flux, *coeff_orig)
-        ax_flux[num%5].plot(flux_probe, y2,'-.')
-        ax_flux[num%5].plot(prof_flux, y3,'r--')
-        ax_flux2[int((num-start_time)/5)].plot(flux_probe, y2)
-        ax_flux2[int((num-start_time)/5)].plot(prof_flux, y3,'r--')
+        ax_flux[num%n_plots].plot(flux_probe, y2,'-.')
+        ax_flux[num%n_plots].plot(prof_flux, y3,'r--')
+        ax_flux2[int((num-start_time)/n_plots)].plot(flux_probe, y2)
+        ax_flux2[int((num-start_time)/n_plots)].plot(prof_flux, y3,'r--')
         ax_probes[1].plot(r_probes,vel_list,'-o')
         ax_probes[0].set_ylim([0,4])
         ax_probes[0].set_xlim([1.45, 2.32])
@@ -303,6 +309,10 @@ for num in rel_times:
             ax1.plot(prof_flux, prof,'x')
             ax1.plot(flux_new, prof_interp,'o')
             fig1.canvas.draw();fig1.show()
+    if num%5==0:
+        fig_flux.canvas.draw();fig_flux.show()
+        fig_flux2.canvas.draw();fig_flux2.show()
+
 fig_probes.canvas.draw();fig_probes.show()
 fig_flux.canvas.draw();fig_flux.show()
 fig_flux2.canvas.draw();fig_flux2.show()
