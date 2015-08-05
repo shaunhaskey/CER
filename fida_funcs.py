@@ -318,11 +318,11 @@ def make_run_idl_f90setup(shot_list, time_list, diag, d3d_base_dir, beam, commen
     d3d_prefida_overall = ''
     for shot, time in zip(shot_list, time_list):
         time_str = '{:05d}'.format(int(time))
-        f90_overall+=f90_txt.format(shot=shot, time = time_str, beam=beam,comment=comment, diag = diag)
-        d3d_prefida_overall+=d3d_input_prefida.format(shot=shot, time = time_str,)
+        f90_overall+=f90_txt.format(shot=shot, time=time_str, beam=beam, comment=comment, diag=diag)
+        #d3d_prefida_overall+=d3d_input_prefida.format(shot=shot, time = time_str,)
 
     print f90_overall
-    print d3d_prefida_overall
+    #print d3d_prefida_overall
     
     with file(idl_input_file,'w') as filehandle:
         tmp_txt = setup_txt2.format(f90_txt = f90_overall, d3d_input_prefida = '\n')
