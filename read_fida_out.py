@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.io.netcdf as netcdf
-import os
+import os, copy
 import OMFITtree
 import matplotlib.pyplot as pt
 import numpy
@@ -123,7 +123,7 @@ def calc_ti_vel(data, wave, plot = True, ax_tmp = None):
     #ti /= 1.e3 ;; keV
     print ti, vlos
     print '########## finished ###############'
-    return ti, vlos
+    return ti, vlos, coeff
 
 print 'hello world'
 nrows = 5
@@ -143,7 +143,7 @@ def plot_profiles():
         run_id = 'def'
         #inputs, neutrals, spectra, weights = get_data(dir, run_id = 'def', plot = False)
         #halo = +spectra.variables['halo'].data
-        a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/g{}.{:05d}'.format(shot, num, shot, num))
+        a = OMFITtree.OMFITeqdsk(filename=HOME + '/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/g{}.{:05d}'.format(shot, num, shot, num))
         #a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(900,900 ))
         b = a['AuxQuantities']
         rgrid,zgrid = np.meshgrid(b['R'],b['Z'])
@@ -161,7 +161,7 @@ def plot_profiles():
         print num
         for plot_key,ax_tmp in zip(['ti','te','ne'],ax):
             print plot_key, ax_tmp
-            fname = '/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/d{}{}.{:05d}'.format(shot, num,plot_key, shot, num)
+            fname = HOME + '/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/d{}{}.{:05d}'.format(shot, num,plot_key, shot, num)
             #fname = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/d{}158676.{:05d}'.format(900,plot_key, 900)
             dat_obj = OMFITtree.OMFITidlSav(fname)['{}_str'.format(plot_key)]
             if plot_key=='ne':
@@ -181,18 +181,18 @@ def plot_profiles():
 import cer_funcs as CER
 def mtanh_wrapper(x,*p):
     core = [0.02]#, 0.001]
-    edge = [-0.02]
+    edge = []#-0.02]
     p = [i for i in p]
     p = p + [len(core), len(edge), False] + core + edge
     print p
     y = CER.mtanh(x,*p)
     return y
 
-
 #plot_profiles()
 
 fit_coeffs = []
 fit_coeffs_orig = []
+results = {}
 for num in rel_times:
     HOME = os.environ['HOME']
     #num = 200
@@ -217,9 +217,9 @@ for num in rel_times:
 
         halo = +spectra.variables['halo'].data
         plot_key = 'ti'
-        a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/g{}.{:05d}'.format(shot, num,shot, num))
+        a = OMFITtree.OMFITeqdsk(filename=HOME + '/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/g{}.{:05d}'.format(shot, num,shot, num))
         #a = OMFITtree.OMFITeqdsk(filename='/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/g158676.{:05d}'.format(900, 900))
-        prof_name = '/u/haskeysr/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/d{}{}.{:05d}'.format(shot, num,plot_key, shot, num)
+        prof_name = HOME + '/gaprofiles/f90fidasim/{}/{:05d}/MAIN_ION330/def/d{}{}.{:05d}'.format(shot, num,plot_key, shot, num)
         #prof_name = '/u/haskeysr/gaprofiles/f90fidasim/158676/{:05d}/MAIN_ION330/def/d{}158676.{:05d}'.format(900,plot_key, 900)
         prof_dat = OMFITtree.OMFITidlSav(prof_name)['{}_str'.format(plot_key)]
         prof_flux = prof_dat['{}_{}'.format(sav_key, plot_key.upper())]
@@ -257,7 +257,7 @@ for num in rel_times:
         #halo[0,:]
         plot_spectrum = False
         plot_spectra = False
-        ti_list = []; vel_list = []
+        ti_list = []; vel_list = []; coeffs_list = []
         if plot_spectra:
             fig_tmp, ax_tmp = pt.subplots(nrows=5,ncols=5, sharex = True)
             ax_tmp = ax_tmp.flatten()
@@ -268,11 +268,14 @@ for num in rel_times:
             else:
                 ax_tmp_in = None
                 plot_spectrum_tmp = False
-            ti, vel = calc_ti_vel(halo[i,:], wave, plot=plot_spectrum_tmp, ax_tmp = ax_tmp_in)
+            ti, vel, coeffs = calc_ti_vel(halo[i,:], wave, plot=plot_spectrum_tmp, ax_tmp = ax_tmp_in)
             if (i%5==0) and plot_spectra:
                 ax_tmp[i/5].text(ax_tmp[i/5].get_xlim()[0],0,'{:.3f}'.format(r_probes[i]),verticalalignment='bottom',horizontalalignment='left')
             ti_list.append(ti)
             vel_list.append(vel)
+            coeffs_list.append(coeffs)
+
+
         ax_probes[0].plot(r_probes,ti_list, marker='.',linestyle='-')
         ax_flux[num%n_plots].plot(flux_probe,ti_list, marker='.',linestyle='-')
         ax_flux[num%n_plots].plot(prof_flux, prof,'b-')
@@ -280,12 +283,14 @@ for num in rel_times:
         ax_flux2[int((num-start_time)/n_plots)].plot(prof_flux, prof,'b-')
         guess = [1.5, 0.2, 0.9, 0.05,]
         coeff, var_matrix = curve_fit(mtanh_wrapper, flux_probe, ti_list, p0=guess,)
-
         guess_orig = [1.5, 0.2, 0.9, 0.05,]
         coeff_orig, var_matrix_orig = curve_fit(mtanh_wrapper, prof_flux, prof, p0=guess_orig,)
-
+        results[num] = {'ti_list':copy.deepcopy(ti_list), 
+                        'vel_list':copy.deepcopy(vel_list),
+                        'coeffs_list':copy.deepcopy(coeffs_list),
+                        'mtanh_diag':copy.deepcopy(coeff),
+                        'mtanh_real':copy.deepcopy(coeff_orig)}
         fit_coeffs_orig.append(coeff_orig)
-
         fit_coeffs.append(coeff)
         if plot_spectra:
             fig_tmp.suptitle('Top:{:.3f},Width:{:.3f}'.format(fit_coeffs[-1][0], fit_coeffs[-1][3]))
@@ -329,4 +334,19 @@ ax[1].plot(top,'-o')
 ax[1].plot(top_orig,'-o')
 fig.canvas.draw();fig.show()
 ax[1].set_ylim([0,ax[1].get_ylim()[1]])
+fig.canvas.draw();fig.show()
+
+fig, ax = pt.subplots(nrows = 2)
+max_real = []; max_diag = []
+#for i in range(1400,1425):#results.keys():
+for i in results.keys():
+    mtanh_real = mtanh_wrapper(prof_flux, *results[i]['mtanh_real'])
+    mtanh_diag = mtanh_wrapper(prof_flux, *results[i]['mtanh_diag'])
+    max_real.append(np.max(np.abs(np.diff(mtanh_real))))
+    max_diag.append(np.max(np.abs(np.diff(mtanh_diag))))
+    np.diff(mtanh_real)
+    ax[0].plot(prof_flux, mtanh_real)
+    ax[0].plot(prof_flux, mtanh_diag, '--')
+ax[1].plot(max_real)
+ax[1].plot(max_diag)
 fig.canvas.draw();fig.show()
