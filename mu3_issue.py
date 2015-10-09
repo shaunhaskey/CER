@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as pt
 import gc
 import scipy.io.netcdf as net
-#idl = pidly.IDL('cerview')
 #shot = 162288
 #chord = 'm13'
 #idl("get_chord,{},'{}'".format(shot, chord))
@@ -12,7 +11,6 @@ import scipy.io.netcdf as net
 #idl("close,1")
 
 #a = np.loadtxt('/u/haskeysr/hello.txt')
-
 
 def get_data(chord_list, shot, idl = None, raw = True, net_cdf = True):
     if idl==None:idl = pidly.IDL('cerview')
@@ -57,8 +55,9 @@ def get_data(chord_list, shot, idl = None, raw = True, net_cdf = True):
     return idl, output_data
 
 shot = 162288
-def write_shot_nc(shot):
-    ch_list = [1,2,3,4,5,6,7,8,10,11,12,13,17,24,25,26,27,28,29,31]
+def write_shot_nc(shot, ch_list = None, raw=True, get_white=True):
+    if ch_list==None:
+        ch_list = [1,2,3,4,5,6,7,8,10,11,12,13,17,24,25,26,27,28,29,31]
     #chord_list = ['m10','m11','m12','m13']
     chord_list = ['m{:02d}'.format(i) for i in ch_list]
     cmd = "id=ncdf_create('{}.nc',/CLOBBER)".format(shot); print cmd; idl(cmd)
@@ -66,10 +65,19 @@ def write_shot_nc(shot):
     cmd = "yid = ncdf_dimdef(id,'y',2032)"; print cmd; idl(cmd)
     for chord in chord_list:
         cmd = "vid = ncdf_vardef(id,'{}',[xid,yid],/FLOAT)".format(chord); print cmd; idl(cmd)
+        if get_white:
+            cmd = "zid = ncdf_vardef(id,'{}white',yid,/FLOAT)".format(chord); print cmd; idl(cmd)
     cmd = "NCDF_CONTROL, id, /ENDEF"; print cmd; idl(cmd)
     for chord in chord_list:
         cmd = "get_chord,{},'{}'".format(shot, chord);print cmd; idl(cmd)
-        cmd = "ncdf_varput, id, '{}', chord_data.raw".format(chord); print cmd; idl(cmd)
+        if get_white:
+            cmd = "get_chord_white,{},'{}'".format(shot, chord);print cmd; idl(cmd)
+            cmd = "ncdf_varput, id, '{}white', chord_white.RESP_ON".format(chord); print cmd; idl(cmd)
+        if raw:
+            cmd = "ncdf_varput, id, '{}', chord_data.raw".format(chord); print cmd; idl(cmd)
+        else:
+            print('data')
+            cmd = "ncdf_varput, id, '{}', chord_data.data".format(chord); print cmd; idl(cmd)
     cmd = "ncdf_close, id"; print cmd; idl(cmd)
 
 
@@ -103,6 +111,19 @@ def clr_plot(system, shot, netcdf_file = None):
     gc.collect()
 
 
+get_shots = True
+if get_shots:
+    #start_shot = 900000
+    #end_shot = 900004
+    #shot_list = [900000,900001,900002,900004]
+    shot_list = [163601, 163600]
+    idl = pidly.IDL('cerview')
+    ch_list = [1]
+    for shot in shot_list:
+        write_shot_nc(shot, ch_list= ch_list, raw = False, get_white = True)
+    idl.close()
+
+1/0
 for shot in range(162330,162348):
     a = net.netcdf_file('{}.nc'.format(shot))
     clr_plot('MU1', shot, netcdf_file = a)
@@ -117,9 +138,6 @@ for shot in range(162295,162319):
     clr_plot('MU3', shot, netcdf_file = a)
     clr_plot('MU4', shot, netcdf_file = a)
 
-1/0
-for shot in range(162330,163348):
-    write_shot_nc(shot)
 
 a = net.netcdf_file('162288.nc',mmap=False)
 print a.variables

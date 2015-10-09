@@ -3,6 +3,17 @@ Todo list:
 -> Run CERFIT from within this widget for minor changes like modifying the time subtraction slice
 -> Plot the profiles as a function of time, and allow stepping through this data
 -> Modification, removal etc... of action items from the widget
+
+print 'r: reload'
+print 'c: add cold line, cold_line:chords:location'
+print 'k: kill datapoint, kill:chords:time'
+print 'm: modify datapoint modify:chords:time,new_tss'
+print 'd: Delete a chord completely remove:chords'
+print 'lower_time:time'
+print 'upper_time:time'
+print 'd: Delete a chord completely remove:chords'
+
+
 '''
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
@@ -89,6 +100,11 @@ class gui():
         self.action_list_scroll.add_with_viewport(self.action_list_label)
         #vbox.pack_start(self.action_list_label)
         vbox_timing = gtk.VBox()
+        help_vbox = gtk.VBox()
+        help_label = gtk.Label('''This is the help_label
+        Line2
+        Line3
+        ''')
         self.timing_combobox_chan = gtk.combo_box_new_text()
         self.timing_combobox_beam = gtk.combo_box_new_text()
         for i in ['30','33','21']:
@@ -102,6 +118,7 @@ class gui():
         for i in self.chan_sels: self.timing_combobox_chan.append_text(i.get_label())
 
         vbox_timing.pack_start(hbox_timing, expand = False, fill = False, padding = 0)
+        help_vbox.pack_start(help_label, expand = False, fill = False, padding = 0)
         #vbox_timing.pack_start(self.timing_button, expand = False, fill = False, padding = 0)
         vbox_timing.pack_start(self.vbox_timing, expand = True, fill = True, padding = 0)
         vbox.pack_start(self.action_list_scroll)
@@ -131,6 +148,7 @@ class gui():
         self.notebook.append_page(vbox, gtk.Label("ActionItems"))
         self.notebook.append_page(self.vbox_radial,gtk.Label('RadialProfiles'))
         self.notebook.append_page(vbox_timing,gtk.Label('Timing'))
+        self.notebook.append_page(help_vbox,gtk.Label('Help'))
 
         #Set an initial time value
         self.x_val = 1000
