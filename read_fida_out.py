@@ -3,7 +3,6 @@ import scipy.io.netcdf as netcdf
 import os, copy
 import OMFITtree
 import matplotlib.pyplot as pt
-import numpy
 import scipy
 from scipy.optimize import curve_fit
 
@@ -29,7 +28,7 @@ rel_times = range(start_time+offset, end_time,jump)
 
 def gauss(x, *p):
     A, mu, sigma = p
-    return A*numpy.exp(-(x-mu)**2/(2.*sigma**2))
+    return A*np.exp(-(x-mu)**2/(2.*sigma**2))
 
 def get_data(dir, run_id = 'def', plot = False):
     #if 'inputs' not in locals():

@@ -1,4 +1,26 @@
 '''
+To use this:
+* Run tssub on a representative chord for each beam you want to use
+* Create a references.txt file in the cerfit shot directory with this kind of structure so 
+  it knows where to get the tssub files:
+bash-3.2$ cat references.txt
+t_330l_ref, t08
+t_330r_ref, t08
+v_330l_ref, t08
+v_330r_ref, t08
+t_30l_ref, t01
+bash-3.2$ 
+* Set the shot, onbeam, tangential or verticals
+* Then run this script
+
+#Need this because pygtk is too old in the anaconda installation at the moment.
+
+
+bash-3.2$ export PATH="/f/python/linux64/bin":${PATH}
+bash-3.2$ /f/python/linux64/bin/Python widget.py 162810
+
+
+
 -----------------------------------
 Chords and beams being fit
 -----------------------------------
@@ -85,7 +107,25 @@ cerfit_fit_chords.bash [shot] "v07 v24 v08 v09 v10 v11 v12 v14 v16" "tssub_330rt
 import os, time, copy
 import multiprocessing
 import cer_funcs as CER
+import CER_chords
 #read_subtract_file(fname)
+
+shot = 160409
+shot = 160414
+shot = 162810
+cerfit_dir =  '/u/haskeysr/cerfit/{}/'.format(shot)
+cur_dir = os.getcwd()
+on_beams = ['30lt', '330lt']
+on_beams = ['330lt', '330rt']
+#exclude_systems = ['U1', 'U2']
+exclude_systems = []
+
+test_run = False
+number_of_proc = 4
+tangential = True
+vertical = True
+
+if test_run: number_of_proc = 1
 
 def assemble_subtracts(sub_list, fname = False):
     out_txt = ''.join(['time={}\ntssub={}\ngo\n\n'.format(i[0],i[1]) for i in sub_list])
@@ -246,10 +286,6 @@ def run_cerfit_wrapper(input_data):
     run_cerfit(*input_data)
     #output_fname, chords, tssubs, beams, output_fname = input_data
 
-shot = 160409
-shot = 160414
-cerfit_dir =  '/u/haskeysr/cerfit/{}/'.format(shot)
-cur_dir = os.getcwd()
 
 def read_in_npeaks(chords):
     npeaks = {}
@@ -260,54 +296,6 @@ def read_in_npeaks(chords):
             if i.find('NPEAK')>=0:
                 npeaks[chord] = int(i.split('=')[1].rstrip('\n').strip(' '))
     return npeaks
-
-# def parse_line(line):
-#     line = line.split(':')
-#     print line
-#     if i[0]=='cold_line':
-#         chrd = i[1].strip(' ')
-#         loc = i[2].strip(' ')
-#         npeaks[chrd]= npeaks[chrd]+1
-#         cmd = 'location {npeak}={loc},npeak {npeak}, temp {npeak}=0, trange {npeak} = 0.2, freeze {npeak}=F'.format(npeak=npeaks[chrd], loc=loc)
-#     if i[0]=='command':
-#         chrd = i[1].strip(' ')
-#         cmd = i[2]
-#     if i[0]=='kill':
-#         pass
-#     if i[0]=='modify':
-#         pass
-#     #lab = i[0].strip(' ')
-#     #val = i[1].strip(' ').replace('\n','').strip(' ').strip(',')
-#     if lab not in extra_cmds.keys():
-#         extra_cmds[lab] = val
-#     else:
-#         extra_cmds[lab] += ',{}'.format(cmd)
-#         print extra_cmds[lab]
-
-# def read_extra_cmds():
-#     try:
-#         with file('{}/extra_cmds2.txt'.format(cerfit_dir), 'r') as filehandle:
-#             lines = filehandle.readlines()
-#     except:
-#         lines = []
-#     print lines
-#     extra_cmds = {}
-#     for i in lines:
-#         if len(i)>=3:
-#             parse_line(i)
-#             i = i.split(':')
-#             print i
-#             lab = i[0].strip(' ')
-#             val = i[1].strip(' ').replace('\n','').strip(' ').strip(',')
-#             extra_cmds[lab] = val
-#     for i in extra_cmds.keys():print i,extra_cmds[i]
-#     kill_times = {}
-#     modify_times = {}
-#     for i in chords: 
-#         kill_times[i] = []
-#         modify_times[i] = {'times':[],'subs':[]}
-
-#     return extra_cmds, kill_times, modify_times
 
 def read_extra_cmds():
     try:
@@ -440,6 +428,12 @@ print cmd;os.system(cmd)
 cmd = 'cp -a /u/grierson/cerfit/setup/in/tssub/fy14/in_* {}/orig_inputs/'.format(cerfit_dir)
 print cmd;os.system(cmd)
 
+#This overwrites any of those other files with data from fy15
+#Need to check the date of the shot and overwrite if necessary....
+if shot>=162705:
+    cmd = 'cp -a /u/grierson/cerfit/setup/in/tssub/fy15/in_* {}/orig_inputs/'.format(cerfit_dir)
+    print cmd;os.system(cmd)
+
 with file('/cerbl/shotstatus/shot_{:04d}.status'.format(shot/100)) as filehandle:
     lines = filehandle.readlines()
 
@@ -471,7 +465,6 @@ b.remove('lines')
 for i in b:
     print i, shot_data[shot][i]['TIMI'], shot_data[shot][i]['TIMI']
 
-
 def read_references():
     with file('references.txt','r') as filehandle: lines = filehandle.readlines()
     tssub_refs = {}
@@ -489,12 +482,6 @@ def read_references():
     return tssub_refs
 os.chdir(cerfit_dir)
 tssub_refs = read_references()
-on_beams = ['30lt', '330lt']
-#t_330l_ref = 't08'
-#v_330l_ref = 'v04' 160409
-#v_330l_ref = 't08'
-#t_30l_ref = 't01'
-
 
 exclude_list = read_remove_list()
 #exclude_list = ['t14','t15','t16','v14','v16','v17','v18']
@@ -504,12 +491,26 @@ exclude_list = read_remove_list()
 
 def setup_tssub_links(subtract_name):
     #subtract_name = 'timesub' if timesumb else 'tssub'
-    dest = '{}/{}/30lt/{}.dat'.format(cerfit_dir,tssub_refs['t_30l_ref'],subtract_name)
-    if os.path.isfile(dest):os.system('ln -sf {} {}/{}_t_30lt.dat'.format(dest,cerfit_dir, subtract_name))
-    dest = '{}/{}/330lt/{}.dat'.format(cerfit_dir,tssub_refs['t_330l_ref'], subtract_name)
-    if os.path.isfile(dest):os.system('ln -sf {} {}/{}_t_330lt.dat'.format(dest,cerfit_dir, subtract_name))
-    dest = '{}/{}/330lt/{}.dat'.format(cerfit_dir,tssub_refs['v_330l_ref'], subtract_name)
-    if os.path.isfile(dest):os.system('ln -sf {} {}/{}_v_330lt.dat'.format(dest,cerfit_dir, subtract_name))
+    for i in tssub_refs.keys():
+        beam = i[2:].replace('_ref','') + 't'
+        print i, i[2:], i[2:].rstrip('_ref'), beam
+        dest = '{}/{}/{}/{}.dat'.format(cerfit_dir,tssub_refs[i],beam,subtract_name)
+        print dest
+        if os.path.isfile(dest):
+            cmd = 'ln -sf {} {}/{}_{}_{}.dat'.format(dest,cerfit_dir, subtract_name,i[0],beam)
+            print cmd
+            os.system(cmd)
+    # for j in ['t','v']:
+    #     for i in on_beams:
+    #         i2 = i.rstrip('t')
+    #         dest = '{}/{}/{}/{}.dat'.format(cerfit_dir,tssub_refs['t_{}_ref'.format(i2)],i,subtract_name)
+    #         if os.path.isfile(dest):
+    #             os.system('ln -sf {} {}/{}_t_30lt.dat'.format(dest,cerfit_dir, subtract_name))
+
+    # dest = '{}/{}/330lt/{}.dat'.format(cerfit_dir,tssub_refs['t_330l_ref'], subtract_name)
+    # if os.path.isfile(dest):os.system('ln -sf {} {}/{}_t_330lt.dat'.format(dest,cerfit_dir, subtract_name))
+    # dest = '{}/{}/330lt/{}.dat'.format(cerfit_dir,tssub_refs['v_330l_ref'], subtract_name)
+    # if os.path.isfile(dest):os.system('ln -sf {} {}/{}_v_330lt.dat'.format(dest,cerfit_dir, subtract_name))
     #os.system('ln -sf {}/{}/330lt/tssub.dat {}/tssub_t_330lt.dat'.format(cerfit_dir,t_330l_ref,cerfit_dir))
     #os.system('ln -sf {}/{}/330lt/tssub.dat {}/tssub_v_330lt.dat'.format(cerfit_dir,v_330l_ref,cerfit_dir))
 
@@ -517,15 +518,11 @@ subtract_name = 'timesub'
 
 setup_tssub_links(subtract_name)
 
-test_run = False
-number_of_proc = 4
-if test_run: number_of_proc = 1
-tangential = True
-vertical = True
-if tangential: os.system('rm {shot}.8t* d{shot}_tang*.nc'.format(shot = shot))
-if vertical: os.system('rm {shot}.8v* d{shot}_vert*.nc'.format(shot=shot))
-#exclude_systems = ['U1', 'U2']
-exclude_systems = []
+if tangential: 
+    os.system('rm {shot}.8t* d{shot}_tang*.nc'.format(shot = shot))
+if vertical: 
+    os.system('rm {shot}.8v* d{shot}_vert*.nc'.format(shot=shot))
+
 
 if test_run:
     chords = ['t01', 't08', 'v04']
@@ -534,14 +531,15 @@ if test_run:
     #tssubs = ['tssub_30lt.dat','tssub_330lt.dat']
 else:
     chords = [];tssubs = [];beams = []
+    CER_chord_details = CER_chords.impurity_CER(shot)
     for on_beam in on_beams:
-        chords_tmp = beam_to_chord(on_beam, exclude_systems = exclude_systems, tangential = tangential, vertical = vertical)
-        for i in exclude_list: 
-            try:
-                chords_tmp.remove(i)
-            except ValueError:
-                pass
-                
+        chords_tmp = CER_chord_details.chords_for_beam(on_beam,exc_specs=exclude_systems,tangential=tangential,vertical=vertical, remove_chords = exclude_list)
+        #chords_tmp = beam_to_chord(on_beam, exclude_systems = exclude_systems, tangential = tangential, vertical = vertical)
+        # for i in exclude_list: 
+        #     try:
+        #         chords_tmp.remove(i)
+        #     except ValueError:
+        #         pass
         print chords_tmp
         if len(chords_tmp)>0:
             tssubs_tmp = ['{}_{}_{}.dat'.format(subtract_name,i[0], on_beam) for i in chords_tmp]
@@ -559,7 +557,7 @@ print "Lower time: {}, upper time: {}".format(lower_time, upper_time)
 
 input_data_list = make_list_of_inputs(chords, tssubs, beams, number_of_proc)
 
-number_of_proc = 5
+#number_of_proc = 5
 if number_of_proc>1:
     p = multiprocessing.Pool(number_of_proc)
     p.map(run_cerfit_wrapper, input_data_list)

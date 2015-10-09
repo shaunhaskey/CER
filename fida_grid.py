@@ -4,13 +4,26 @@ import scipy.io.netcdf as netcdf
 
 directory = '/u/haskeysr/FIDASIM/RESULTS/D3D/158676/01000/MAIN_ION330/'
 id_name = 'def'
-def fida_plot_grid(directory, id_name):
+def fida_plot_grid(directory, id_name, RMIDOUT = 2.253, RMIDIN=1.1043):
     fig, ax = pt.subplots()
     inputs = netcdf.netcdf_file('{}/{}_inputs.cdf'.format(directory, id_name), mmap = False)
-    for x in inputs.variables['x_grid'].data[0,0,:]:
-        ax.axvline(x)
-    for y in inputs.variables['y_grid'].data[0,:,0]:
-        ax.axhline(y)
+    xmin, xmax = np.min(inputs.variables['x_grid'].data[0,0,:]), np.max(inputs.variables['x_grid'].data[0,0,:])
+    ymin, ymax = np.min(inputs.variables['y_grid'].data[0,0,:]), np.max(inputs.variables['y_grid'].data[0,:,0])
+    ax.vlines(inputs.variables['x_grid'].data[0,0,:], ymin, ymax)
+    ax.hlines(inputs.variables['y_grid'].data[0,:,0], xmin, xmax)
+    # for x in inputs.variables['x_grid'].data[0,0,:]:
+    #     ax.axvline(x)
+    #     ax.axvline(x)
+    # for y in inputs.variables['y_grid'].data[0,:,0]:
+    #     ax.axhline(y)
+    print RMIDOUT*100
+    def circle(amp):
+        phi = np.linspace(0,2.*np.pi,100)
+        ax.plot(amp * np.cos(phi), amp * np.sin(phi))
+    circle(RMIDOUT*100)
+    circle(RMIDIN*100)
+    #circle2=pt.Circle((RMIDOUT*100,RMIDOUT*100),.5,color='b',fill=False)
+    #circle2=pt.Circle((RMIDIN*100,RMIDIN*100),.5,color='b',fill=False)
     yrange = [np.min(inputs.variables['y_grid'].data[0,:,0]), np.max(inputs.variables['y_grid'].data[0,:,0])]
     xrange = [np.min(inputs.variables['x_grid'].data[0,0,:]), np.max(inputs.variables['x_grid'].data[0,0,:])]
     for i, (x1,y1, x2, y2) in enumerate(zip(inputs.variables['xlos'].data, inputs.variables['ylos'].data, inputs.variables['xlens'].data, inputs.variables['ylens'].data)):
@@ -29,6 +42,7 @@ def fida_plot_grid(directory, id_name):
     fig.canvas.draw();fig.show()
 
 fida_plot_grid(directory, id_name)
+
 directory = '/u/haskeysr/FIDASIM/RESULTS/D3D/158676/01010/MAIN_ION330/'
 id_name = 'def'
 fida_plot_grid(directory, id_name)

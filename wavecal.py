@@ -1,4 +1,13 @@
 #!/task/imd/anaconda/bin/python
+'''
+use as:
+wavecal start_shot end_shot run_wavecal write_mds
+start_shot: beginning shot for analysis
+end_shot: end shot for analysis (inclusive)
+run_wavecal: True/False puts results in the users ~/cerfit/wavecal directory
+write_mds: copies the information into the MDSplus tree
+'''
+
 import pexpect, time, glob, os
 import pidly
 import sys
@@ -126,7 +135,10 @@ if run_wavecal:
 if write_mds:
     print 'Putting the wavecal data into the tree'
     #Start and setup IDL
-    idl = pidly.IDL('/usr/local/bin/idl')
+    idl_executable = '/usr/local/bin/idl'
+    idl_executable = '/sw/link/bin/idl'
+    idl_executable = 'idl'
+    idl = pidly.IDL(idl_executable)
     idl('addanon')
     idl('@/u/kaplan/cerview/cerview.idl')
     idl("get_chord,149661,'t01'")
