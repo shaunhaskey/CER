@@ -15,6 +15,7 @@ for shot in range(160818,160840):
         for i in np.sort(shot_data.keys()):
             print '{:8s} {:15s} {:6s} {}'.format(i, shot_data[i]['TIMI'], shot_data[i]['WAVE'], shot_data[i]['CHOR'])
         if shot_data['CT1']['WAVE']=='5290.5' and shot_data['Unit1']['WAVE']=='5167.0':shot_imp.append(tmp_shot)
+
 1/0
 
 chord = 't01'

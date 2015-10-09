@@ -1,7 +1,7 @@
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as pt
-import OMFITtree
+#import OMFITtree
 import pidly
 import os
 import time as time_mod
@@ -48,7 +48,7 @@ def get_los_data(dir='/u/haskeysr/FIDASIM/RESULTS/D3D/155196/00500/MAIN_ION330/'
 
 
 
-b = FIDA.interpolate_grid_profiles(155196,500)
+#b = FIDA.interpolate_grid_profiles(155196,500)
 HOME = os.environ['HOME']
 shot = 155196
 time = 500

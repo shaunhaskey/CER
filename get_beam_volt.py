@@ -1,4 +1,5 @@
 from OMFITtree import OMFITmdsValue
+import numpy as np
 shot = 163257
 def get_nbi(shot, plot=False, beams=None):
     out_dict = {'names':[],'name_map':[],'volts':[],'power':[], 'shot':shot}

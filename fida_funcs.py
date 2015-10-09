@@ -6,11 +6,11 @@ import subprocess as sub
 import cPickle as pickle
 from scipy.io import netcdf
 import numpy as np
-import cer_funcs as CER
+#import cer_funcs as CER
 import scipy
-import shutil
-import itertools as iter
-import cer_funcs as CER
+#import shutil
+#import itertools as iter
+#import cer_funcs as CER
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as pt
 import pyMARS.generic_funcs as gen
