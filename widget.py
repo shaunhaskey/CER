@@ -15,6 +15,17 @@ print 'd: Delete a chord completely remove:chords'
 
 
 '''
+help_txt = '''
+r: reload
+c: add cold line, cold_line:chords:location
+k: kill datapoint, kill:chords:time
+m: modify datapoint modify:chords:time,new_tss
+d: Delete a chord completely remove:chords
+lower_time:time
+upper_time:time
+d: Delete a chord completely remove:chords
+'''
+
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
 from matplotlib.backends.backend_gtkagg import NavigationToolbar2GTKAgg as NavigationToolbar
@@ -28,7 +39,12 @@ import cer_funcs as CER
 HOME = os.environ['HOME']
 shot = int(sys.argv[1])
 
-#shot = 160409
+#Turns out this is not needed......
+try:
+    impurity=sys.argv[2]
+except:
+    print('Did not get impurity from input args, defaulting to Carbon')
+    impuriy = 'C'
 
 def change_name(ch_name):
     if ch_name.find('tang')>=0:
@@ -38,8 +54,9 @@ def change_name(ch_name):
     return ch_name
 
 class gui():
-    def __init__(self,shot):
+    def __init__(self,shot, impurity):
         self.shot = shot
+        self.impurity = impurity
         self.win = gtk.Window()
         self.win.connect("destroy", lambda x: gtk.main_quit())
         self.win.connect("key-press-event",self.on_window_key_press_event)
@@ -62,6 +79,9 @@ class gui():
         self.fig_radial, self.canvas_radial, self.vbox_radial, self.toolbar_radial = self.add_matplotlib()
         self.fig_timing, self.canvas_timing, self.vbox_timing, self.toolbar_timing = self.add_matplotlib()
 
+        self.fig_profiles, self.canvas_profiles, self.vbox_profiles, self.toolbar_profiles = self.add_matplotlib()
+
+
         self.ax_radial = [self.fig_radial.add_subplot(2,2,i) for i in range(1,5)]
         self.ax_timing = [self.fig_timing.add_subplot(1,1,i) for i in range(1,2)]
         #Get the available netCDF data 
@@ -74,6 +94,8 @@ class gui():
         self.resids_figure, self.resids_canvas, self.resids_parent, self.resids_toolbar = self.add_matplotlib()
         #setup an alias
         self.figure_parent = self.vbox
+
+        #self.profile_parent = gtk.VBox()
 
         self.status_label = gtk.Label()
         self.action_status = gtk.Label()
@@ -101,10 +123,7 @@ class gui():
         #vbox.pack_start(self.action_list_label)
         vbox_timing = gtk.VBox()
         help_vbox = gtk.VBox()
-        help_label = gtk.Label('''This is the help_label
-        Line2
-        Line3
-        ''')
+        help_label = gtk.Label(help_txt)
         self.timing_combobox_chan = gtk.combo_box_new_text()
         self.timing_combobox_beam = gtk.combo_box_new_text()
         for i in ['30','33','21']:
@@ -136,14 +155,26 @@ class gui():
         self.action_list_label.set_label('\n'.join(self.action_list))
 
         hbox = gtk.HBox(homogeneous = False)
+        hpane = gtk.HPaned()
+        vpane = gtk.VPaned()
+
         #self..pack_start(self.notebook, expand = True, fill = True, padding = 0)
         self.overall_vbox.pack_end(entry_hbox, expand = False, fill = False, padding = 0)
         self.figure_parent.pack_end(self.status_label, expand = False, fill = False, padding = 0)
         self.figure_parent.pack_end(self.action_status, expand = False,fill = False, padding = 0)
-        hbox.pack_start(self.figure_parent, expand = True, fill = True)
-        hbox.pack_end(self.chans_vbox, expand = False,fill = False, padding = 0)
 
-        self.notebook.append_page(hbox,gtk.Label("Data"))
+        vpane.add1(self.vbox_profiles)
+        vpane.add2(self.figure_parent)
+
+        #hpane.add1(self.figure_parent)
+        hpane.add1(vpane)
+        hpane.add2(self.chans_vbox)
+
+        #hbox.pack_start(self.figure_parent, expand = True, fill = True)
+        #hbox.pack_end(self.chans_vbox, expand = False, fill = False, padding = 0)
+
+        #self.notebook.append_page(hbox,gtk.Label("Data"))
+        self.notebook.append_page(hpane,gtk.Label("Data"))
         self.notebook.append_page(self.resids_parent,gtk.Label("Residuals"))
         self.notebook.append_page(vbox, gtk.Label("ActionItems"))
         self.notebook.append_page(self.vbox_radial,gtk.Label('RadialProfiles'))
@@ -269,6 +300,9 @@ class gui():
 
     def selection_frame(self,):
         vbox = gtk.VBox()
+        scrolled_window = gtk.ScrolledWindow()
+        scrolled_window.set_border_width(10)
+        scrolled_window.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_ALWAYS)
         checkbox_list = []
         count = 0
         for row in self.avail_chans:
@@ -286,6 +320,7 @@ class gui():
         plot_checkboxes_list = []
         self.plot_lists = ['spec','resid','resid_dot','temp','vel','amp']
 
+        #vbox.pack_start(scrolled_window)
         vbox.pack_start(gtk.HSeparator())
         for tmp_key in self.plot_lists:
             hbox = gtk.HBox(homogeneous=True)
@@ -301,7 +336,8 @@ class gui():
         go_button = gtk.Button(label='Update')
         go_button.connect("clicked", self.get_active_channels, "cool button")
         vbox.pack_start(go_button)
-        return checkbox_list, vbox, plot_checkboxes_list
+        scrolled_window.add_with_viewport(vbox)
+        return checkbox_list, scrolled_window, plot_checkboxes_list
 
     def plot_all_residuals(self,):
         ncols = 4
@@ -335,6 +371,7 @@ class gui():
                 self.plot_dict[i]['plot_func'](*self.plot_dict[i]['args'])
         self.f.tight_layout(pad=0)
         self.f.canvas.draw()
+        self.fig_profiles.canvas.draw()
         self.startup = False
 
     def get_netcdf(self,):
@@ -398,19 +435,30 @@ class gui():
         print 'reading cer files'
         dir_loc = HOME + '/cerfit/{shot}'.format(shot = self.shot)
         self.chan_R = []
+        if self.impurity=='C':
+            imp_num='8'
+        elif self.impurity=='F':
+            imp_num='15'
         for i in self.avail_chans:
             num = int(i[4:])
             if i.find('tang')>=0:
                 letter='t'
             else:
                 letter = 'v'
-            if num<=7 and letter == 't':
+            if (num>=1) and (num<=7) and (letter == 't'):
                 append_letter = 'a'
-            if num>=8 and letter == 't':
+            elif (num>=8) and (num<=16) and (letter == 't'):
                 append_letter = 'd'
+            elif (num>=17) and (num<=22) and (letter == 't'):
+                append_letter = 'a'
+            elif (num>=23) and (num<=24) and (letter == 't'):
+                append_letter = 'd'
+            elif (num>=41) and (num<=48) and (letter == 't'):
+                append_letter = 'd'
+
             if letter == 'v':
                 append_letter = ''
-            fname = '{dir_loc}/{shot}.8{sys}{num}{ext}'.format(dir_loc = dir_loc, shot = self.shot, sys=letter,num=num,ext=append_letter)
+            fname = '{dir_loc}/{shot}.{imp_num}{sys}{num}{ext}'.format(imp_num = imp_num, dir_loc = dir_loc, shot = self.shot, sys=letter,num=num,ext=append_letter)
             print fname
             with file(fname,'r') as filehandle: lines = filehandle.readlines()
             find_txt = 'RADIUS ='
@@ -452,6 +500,7 @@ class gui():
 
     def generate_figure_layout(self,):
         self.f.clf()
+        self.fig_profiles.clf()
         self.ncols = self.n_chans
         self.nrows = np.sum(np.array([self.plot_dict[i]['plot'] for i in self.plot_dict.keys()])>=0)
         self.clickable_axes = []
@@ -492,7 +541,11 @@ class gui():
                     self.plot_dict[i]['axes'] = [self.f.add_subplot(self.nrows, self.ncols, j+1 + self.plot_dict[i]['plot'] *self.n_chans) for j in range(self.n_chans)]
             if self.plot_dict[i]['xax'] =='time':
                 self.clickable_axes.extend(self.plot_dict[i]['axes'])
-
+        self.fig_profiles.clf()
+        self.profile_axes = []
+        self.profile_axes.append(self.fig_profiles.add_subplot(1,3,1))
+        self.profile_axes.append(self.fig_profiles.add_subplot(1,3,2))
+        self.profile_axes.append(self.fig_profiles.add_subplot(1,3,3))
         print len(self.clickable_axes), self.clickable_axes
 
     def on_window_key_press_event(self,window, event):
@@ -643,7 +696,7 @@ class gui():
             if self.x_val<np.min(cur_xlim):
                 self.plot_dict['temp']['axes'][0].set_xlim([cur_xlim[0]-xlim_range*0.9,cur_xlim[1]-xlim_range*0.9])
             self.f.canvas.draw()
-
+            for i in self.profile_axes: i.set_xlim([cur_xlim[0]-xlim_range*0.9,cur_xlim[1]-xlim_range*0.9])
 
 def onclick(event):
     print 'button',event.button
@@ -678,7 +731,7 @@ def onclick(event):
         gui1.clicked()
         #elif (event.inaxes in gui1.clickable_axes) and event.button==3:
 
-gui1 = gui(shot)
+gui1 = gui(shot, impurity)
 cid = gui1.f.canvas.mpl_connect('button_press_event', onclick)
 gtk.main()
 #sd
