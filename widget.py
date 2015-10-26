@@ -410,6 +410,12 @@ class gui():
         for i in self.avail_chans:
             f = netcdf.netcdf_file(dir_loc +  '/d{shot}_{}.nc'.format(i,shot=self.shot))
             self.netcdf_dict[i] = f
+            for tmp_key in f.variables.keys():
+                self.netcdf_dict[i][tmp_key] = f.variables[tmp_key].data.copy()
+            order = np.argsort(self.netcdf_dict[i][tmp_key])
+            for tmp_key in f.variables.keys():
+                self.netcdf_dict[i][tmp_key] = self.netcdf_dict[i][tmp_key][order]
+
 
         #Make an overall interpolated time base
         # self.read_in_cer_files()
