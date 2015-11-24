@@ -183,6 +183,7 @@ class gui():
 
         #Set an initial time value
         self.x_val = 1000
+        self.loc = 0
         self.get_active_channels()
 
         self.plot_all_residuals()
@@ -275,13 +276,15 @@ class gui():
             else:
                 self.plot_dict[i.get_label()]['plot'] = -1
                 print 'inactive plot:',i
-        self.t = self.netcdf_dict[self.plot_channels[0]].variables['time'].data
+        self.t = self.netcdf_dict2[self.plot_channels[0]]['time']
         for i in self.plot_channels:
-            self.t = np.append(self.t, self.netcdf_dict[i].variables['time'].data)
+            self.t = np.append(self.t, self.netcdf_dict2[i]['time'])
         print self.t, self.t.shape
         self.t = np.sort(np.unique(self.t))
         print self.t
         self.generate_figure_layout()
+        self.get_profiles_vs_time()
+
         self.startup_sequence()
         #def update_plots(self,*args):
 
@@ -341,16 +344,16 @@ class gui():
 
     def plot_all_residuals(self,):
         ncols = 4
-        nrows = np.ceil(len(self.netcdf_dict.keys())/float(ncols))
+        nrows = np.ceil(len(self.netcdf_dict2.keys())/float(ncols))
         resids_all_axes = [self.resids_figure.add_subplot(nrows, ncols, 1)]
-        print 'length', len(self.netcdf_dict.keys())
-        for j in range(1,len(self.netcdf_dict.keys())):
+        print 'length', len(self.netcdf_dict2.keys())
+        for j in range(1,len(self.netcdf_dict2.keys())):
             resids_all_axes.append(self.resids_figure.add_subplot(nrows, ncols, j, sharex = resids_all_axes[0], sharey = resids_all_axes[0]))
         
-        for i,tmp_key in enumerate(self.netcdf_dict.keys()):
-            im = resids_all_axes[i].pcolormesh(self.netcdf_dict[tmp_key].variables['time'].data,
-                                               np.arange(self.netcdf_dict[tmp_key].variables[self.im_quant].data.shape[1]),
-                                               self.netcdf_dict[tmp_key].variables[self.im_quant].data.transpose(), cmap='RdBu',)
+        for i,tmp_key in enumerate(self.netcdf_dict2.keys()):
+            im = resids_all_axes[i].pcolormesh(self.netcdf_dict2[tmp_key]['time'],
+                                               np.arange(self.netcdf_dict2[tmp_key][self.im_quant].shape[1]),
+                                               self.netcdf_dict2[tmp_key][self.im_quant].transpose(), cmap='RdBu',)
             im.set_clim([-4,4])
         self.resids_figure.canvas.draw()
 
@@ -362,7 +365,20 @@ class gui():
         vbox.pack_start(canvas)
         vbox.pack_start(toolbar, False, False)
         return f, canvas, vbox, toolbar
-        
+
+    def plot_profiles(self):
+        lims = [[0,6],[0,300],[-300,300]]
+        items = ['temperature','amplitude','velocity',]
+        for name, ax, lim in zip(items, self.profile_axes, lims):
+            print name, ax, self.plot_profiles_data[name]['time'][self.loc]
+            ax.plot(self.plot_profiles_data[name]['R_pts_v'][self.loc], self.plot_profiles_data[name]['data_pts_v'][self.loc],'ro')
+            ax.plot(self.plot_profiles_data[name]['R_pts_t'][self.loc], self.plot_profiles_data[name]['data_pts_t'][self.loc],'bo')
+            ax.set_ylim(lim)
+            ax.set_xlim([120,240])
+            ax.set_title(name)
+        self.fig_profiles.canvas.draw()
+
+            
     def startup_sequence(self,):
         self.startup = True
         self.calc_closest_times()
@@ -372,11 +388,51 @@ class gui():
         self.f.tight_layout(pad=0)
         self.f.canvas.draw()
         self.fig_profiles.canvas.draw()
+        self.plot_profiles()
         self.startup = False
+
+    def get_profiles_vs_time(self,):
+        self.plot_profiles_data = {}
+        items = ['temperature','velocity','amplitude']
+        print 'hello profiles_vs_tiem'
+        for item in items: 
+            self.plot_profiles_data[item] = {'data_pts_t':[], 'R_pts_t':[], 'data_pts_v':[], 'R_pts_v':[], 'time':[]}
+            for tmp_time in self.t:
+                data_pts_v = []
+                R_pts_v = []
+                data_pts_t = []
+                R_pts_t = []
+                for i in self.netcdf_dict2.keys():
+                    diff = np.abs(self.netcdf_dict2[i]['time'] - tmp_time)
+                    min_loc = np.argmin(diff)
+                    if i[0]=='t':
+                        data_pts = data_pts_t
+                        R_pts = R_pts_t
+                    else:
+                        data_pts = data_pts_v
+                        R_pts = R_pts_v
+                    if diff[min_loc]<20:
+                        data_pts.append(self.netcdf_dict2[i][item][min_loc])
+                        R_pts.append(self.netcdf_dict2[i]['R'][min_loc])
+                    else:
+                        pass
+                        #data_pts.append(np.NaN)
+                        #R_pts.append(np.NaN)
+                self.plot_profiles_data[item]['data_pts_t'].append(data_pts_t)
+                self.plot_profiles_data[item]['R_pts_t'].append(R_pts_t)
+                self.plot_profiles_data[item]['data_pts_v'].append(data_pts_v)
+                self.plot_profiles_data[item]['R_pts_v'].append(R_pts_v)
+                self.plot_profiles_data[item]['time'].append(tmp_time)
+            
+        for i in self.plot_profiles_data.keys():
+            print i, self.t.shape, len(self.plot_profiles_data[i]['data_pts_t']), len(self.plot_profiles_data[i]['R_pts_t'])
+            print i, self.t.shape, len(self.plot_profiles_data[i]['data_pts_v']), len(self.plot_profiles_data[i]['R_pts_v'])
+            
 
     def get_netcdf(self,):
         self.netcdf_files = []
         self.netcdf_dict = {}
+        self.netcdf_dict2 = {}
         dir_loc = HOME + '/cerfit/{shot}'.format(shot = self.shot)
         dir_list = os.listdir(dir_loc)
         filt_list = []
@@ -408,26 +464,32 @@ class gui():
         self.avail_chans = chan_list_new
         print 'hello',self.avail_chans
         for i in self.avail_chans:
+            print 'Working on :{}'.format(i)
             f = netcdf.netcdf_file(dir_loc +  '/d{shot}_{}.nc'.format(i,shot=self.shot))
             self.netcdf_dict[i] = f
-            for tmp_key in f.variables.keys():
-                self.netcdf_dict[i][tmp_key] = f.variables[tmp_key].data.copy()
-            order = np.argsort(self.netcdf_dict[i][tmp_key])
-            for tmp_key in f.variables.keys():
-                self.netcdf_dict[i][tmp_key] = self.netcdf_dict[i][tmp_key][order]
-
+            self.netcdf_dict2[i] = {}
+            full = ['fit', 'residuals', 'time', 'intensity']
+            slice_down = ['temperature', 'amplitude', 'location']
+            for tmp_key in full:
+                self.netcdf_dict2[i][tmp_key] = f.variables[tmp_key].data.copy()
+            for tmp_key in slice_down:
+                self.netcdf_dict2[i][tmp_key] = f.variables[tmp_key].data[:,0].copy()
+            order = np.argsort(self.netcdf_dict2[i]['time'])
+            for tmp_key in self.netcdf_dict2[i].keys():
+                self.netcdf_dict2[i][tmp_key] = self.netcdf_dict2[i][tmp_key][order]
+        self.read_in_cer_files()
 
         #Make an overall interpolated time base
         # self.read_in_cer_files()
-        # self.overall_t = self.netcdf_dict[self.avail_chans[0]].variables['time'].data
+        # self.overall_t = self.netcdf_dict2[self.avail_chans[0]]['time']
         # for i in self.avail_chans:
-        #     self.overall_t = np.append(self.overall_t, self.netcdf_dict[i].variables['time'].data)
+        #     self.overall_t = np.append(self.overall_t, self.netcdf_dict2[i]['time'])
         # print self.overall_t, self.overall_t.shape
         # self.overall_t = np.sort(np.unique(self.overall_t))
         # print '##############'
         # self.overall_temp_data = np.zeros((len(self.avail_chans),self.overall_t.shape[0]),dtype=float)
         # for i, chan in enumerate(self.avail_chans):
-        #     tmp = interp.interp1d(self.netcdf_dict[chan].variables['time'].data, self.netcdf_dict[chan].variables['temperature'].data[:,0], bounds_error = False, fill_value = 0.,kind='nearest')
+        #     tmp = interp.interp1d(self.netcdf_dict2[chan]['time'], self.netcdf_dict2[chan]['temperature'][:,0], bounds_error = False, fill_value = 0.,kind='nearest')
         #     self.overall_temp_data[i,:] = tmp(self.overall_t)
         # print self.overall_t, self.overall_temp_data
         # #fig, ax = pt.subplots()
@@ -440,13 +502,57 @@ class gui():
     def read_in_cer_files(self,):
         print 'reading cer files'
         dir_loc = HOME + '/cerfit/{shot}'.format(shot = self.shot)
+        files = os.listdir(dir_loc)
+        keep_files = []
+        for i in files:
+            if i.find('{shot}.'.format(shot=self.shot))==0:
+                keep_files.append(i)
         self.chan_R = []
         if self.impurity=='C':
             imp_num='8'
         elif self.impurity=='F':
             imp_num='15'
+
+        def parse_file(fname):
+            with file(fname,'r') as filehandle: lines = filehandle.readlines()
+            #print fname
+
+            find_txt = 'RADIUS ='
+            start = lines[1].find(find_txt)
+            end = lines[1].find('cm')
+            R = float(lines[1][start+len(find_txt):end])
+
+            find_txt = 'DISP ='
+            start = lines[0].find(find_txt)
+            end = lines[0].find(r'A/Ch')
+            disp = float(lines[0][start+len(find_txt):end])
+            tmp = lines[3].split(' ')
+            tmp[:] = [i for i in tmp if i!='']
+            print tmp
+            fiducial = float(tmp[1])
+
+            wavelength = float(lines[0][24:31])
+
+            times = []
+            for i in range(4, len(lines) - 4):
+                lines[i][1]
+                try:
+                    int(lines[i][1:3])
+                    success = True
+                except:
+                    success = False
+                if success:
+                    #times.append(float(lines[i].lstrip(' ').split(' ')[0]))
+                    times.append(float(lines[i][1:8]))
+            print R, disp, fiducial
+            return R, disp, fiducial, wavelength, times
+
         for i in self.avail_chans:
+            valid_files = []
             num = int(i[4:])
+            for tmp_fname in keep_files:
+                if tmp_fname.find('{}{}'.format(i[0], num))>=0:
+                    valid_files.append(tmp_fname)
             if i.find('tang')>=0:
                 letter='t'
             else:
@@ -464,13 +570,30 @@ class gui():
 
             if letter == 'v':
                 append_letter = ''
-            fname = '{dir_loc}/{shot}.{imp_num}{sys}{num}{ext}'.format(imp_num = imp_num, dir_loc = dir_loc, shot = self.shot, sys=letter,num=num,ext=append_letter)
-            print fname
-            with file(fname,'r') as filehandle: lines = filehandle.readlines()
-            find_txt = 'RADIUS ='
-            start = lines[1].find(find_txt)
-            end = lines[1].find('cm')
-            self.chan_R.append(float(lines[1][start+len(find_txt):end]))
+            self.netcdf_dict2[i]['R'] = self.netcdf_dict2[i]['time']*0
+            self.netcdf_dict2[i]['fiducial'] = []
+            self.netcdf_dict2[i]['disp'] = []
+            self.netcdf_dict2[i]['lambda'] = []
+            for tmp_fname in valid_files:
+                #fname = '{dir_loc}/{shot}.{imp_num}{sys}{num}{ext}'.format(imp_num = imp_num, dir_loc = dir_loc, shot = self.shot, sys=letter,num=num,ext=append_letter)
+                fname = '{dir_loc}/{fname}'.format(dir_loc = dir_loc,fname = tmp_fname)
+
+                R, disp, fiducial, wavelength, times = parse_file(fname)
+                #self.netcdf_dict2[i]['disp'].append(disp)
+                #self.netcdf_dict2[i]['fiducial'].append(fiducial)
+                #self.netcdf_dict2[i]['lambda'].append(wavelength)
+                c = 2.9979e8
+                self.netcdf_dict2[i]['velocity'] = c*((self.netcdf_dict2[i]['location']-fiducial)*disp)/wavelength *1.e-3
+                for tmp_time in times:
+                    self.netcdf_dict2[i]['R'][self.netcdf_dict2[i]['time']==tmp_time]=R
+            print i, valid_files, np.sum(self.netcdf_dict2[i]['R']==0.)
+            #print self.netcdf_dict2[i]['R']
+            #print fname
+            #with file(fname,'r') as filehandle: lines = filehandle.readlines()
+            #find_txt = 'RADIUS ='
+            #start = lines[1].find(find_txt)
+            #end = lines[1].find('cm')
+            #self.chan_R.append(float(lines[1][start+len(find_txt):end]))
         self.chan_R = np.array(self.chan_R)
         print self.chan_R
 
@@ -478,9 +601,9 @@ class gui():
         rel_axes = self.plot_dict['resid']['axes']
         self.plot_dict['resid']['im'] = []
         for i,id in enumerate(self.plot_channels):
-            im = rel_axes[i].pcolormesh(self.netcdf_dict[id].variables['time'].data,
-                                        np.arange(self.netcdf_dict[id].variables[self.im_quant].data.shape[1]),
-                                        self.netcdf_dict[id].variables[self.im_quant].data.transpose(), cmap='RdBu',)
+            im = rel_axes[i].pcolormesh(self.netcdf_dict2[id]['time'],
+                                        np.arange(self.netcdf_dict2[id][self.im_quant].shape[1]),
+                                        self.netcdf_dict2[id][self.im_quant].transpose(), cmap='RdBu',)
             self.plot_dict['resid']['im'].append(im)
             im.set_clim([-4,4])
 
@@ -495,7 +618,7 @@ class gui():
             self.plot_dict[plot_key]['vlines'] = []
             for i,id in enumerate(self.plot_channels):
                 self.plot_dict[plot_key]['vlines'].append(rel_axes[i].axvline(self.x_val))
-                self.plot_dict[plot_key]['lines'].append(rel_axes[i].plot(self.netcdf_dict[id].variables['time'].data, self.netcdf_dict[id].variables[var_name].data[:,0],'bx')[0])
+                self.plot_dict[plot_key]['lines'].append(rel_axes[i].plot(self.netcdf_dict2[id]['time'], self.netcdf_dict2[id][var_name][:],'bx')[0])
         else:
             for i,(id,xval) in enumerate(zip(self.plot_channels,self.time_values)):
                 self.plot_dict[plot_key]['vlines'][i].set_xdata([xval,xval])
@@ -558,20 +681,23 @@ class gui():
         value = gtk.gdk.keyval_name(event.keyval)
         best = 0
         for i in self.plot_channels:
-            if len(self.netcdf_dict[i].variables['time'].data)>best:
+            if len(self.netcdf_dict2[i]['time'])>best:
                 tmp_key = i
-                best = len(self.netcdf_dict[i].variables['time'].data)
-        #t = self.netcdf_dict[tmp_key].variables['time'].data
+                best = len(self.netcdf_dict2[i]['time'])
+        #t = self.netcdf_dict2[tmp_key]['time']
         if value == 'f': 
             loc = np.argmin(np.abs(self.t - self.x_val))
             #print loc, self.x_val
             self.x_val = np.min([self.t[loc+1],np.max(self.t)])
+            self.loc = np.argmin(np.abs(self.t - self.x_val))
             #print loc, self.x_val
             self.clicked()
         elif value == 'b':
             loc = np.argmin(np.abs(self.t - self.x_val))
-            #loc = np.argmin(np.abs(self.netcdf_dict[tmp_key].variables['time'].data - self.x_val))
+            #loc = np.argmin(np.abs(self.netcdf_dict2[tmp_key]['time'] - self.x_val))
             self.x_val = np.min([self.t[loc-1],np.max(self.t)])
+            self.loc = np.argmin(np.abs(self.t - self.x_val))
+
             self.clicked()
         elif value=='r':
             self.startup_sequence()
@@ -582,8 +708,8 @@ class gui():
         elif value =='k':
             print 'kill a certain datapoint'
             possible_list = []
-            for i in self.netcdf_dict.keys():
-                if self.x_val in self.netcdf_dict[i].variables['time']:
+            for i in self.netcdf_dict2.keys():
+                if self.x_val in self.netcdf_dict2[i]['time']:
                     possible_list.append(i)
             possible_list = [change_name(ch_name) for ch_name in possible_list]
             print possible_list, len(possible_list)
@@ -593,8 +719,8 @@ class gui():
         elif value =='m':
             print 'modify a certain datapoint'
             possible_list = []
-            for i in self.netcdf_dict.keys():
-                if self.x_val in self.netcdf_dict[i].variables['time']:
+            for i in self.netcdf_dict2.keys():
+                if self.x_val in self.netcdf_dict2[i]['time']:
                     possible_list.append(i)
             possible_list = [change_name(ch_name) for ch_name in possible_list]
             print possible_list, len(possible_list)
@@ -612,7 +738,7 @@ class gui():
             print 'lower_time:time'
             print 'upper_time:time'
             print 'd: Delete a chord completely remove:chords'
-        #self.x_val += self.netcdf_dict[tmp_key].variables['intensity'].data.shape[tmp_key]/2
+        #self.x_val += self.netcdf_dict2[tmp_key]['intensity'].shape[tmp_key]/2
 
     def entry_button_pressed(self,*args):
         txt = self.entry_text.get_text()
@@ -631,10 +757,10 @@ class gui():
     def calc_closest_times(self,):
         self.time_values = []; self.locs = []
         for i,id in enumerate(self.plot_channels):
-            loc = np.argmin(np.abs(self.netcdf_dict[id].variables['time'].data - self.x_val))
-            self.locs.append(np.argmin(np.abs(self.netcdf_dict[id].variables['time'].data - self.x_val)))
-            #print self.x_val, loc, self.netcdf_dict[id].variables['intensity'].data.shape
-            self.time_values.append(self.netcdf_dict[id].variables['time'].data[loc])
+            loc = np.argmin(np.abs(self.netcdf_dict2[id]['time'] - self.x_val))
+            self.locs.append(np.argmin(np.abs(self.netcdf_dict2[id]['time'] - self.x_val)))
+            #print self.x_val, loc, self.netcdf_dict2[id]['intensity'].shape
+            self.time_values.append(self.netcdf_dict2[id]['time'][loc])
 
     def plot_spectra(self,):
         rel_axes = self.plot_dict['spec']['axes']
@@ -642,23 +768,23 @@ class gui():
             self.plot_dict['spec']['line1'] = []
             self.plot_dict['spec']['line2'] = []
             self.plot_dict['spec']['vlines'] = []
-        for i,id in enumerate(self.plot_channels):
+        for i, id in enumerate(self.plot_channels):
             loc = self.locs[i]
-            #tmp_time = self.netcdf_dict[id].variables['time'][loc]
-            xdata= self.netcdf_dict[id].variables['location'][loc,0] - 1
+            #tmp_time = self.netcdf_dict2[id]['time'][loc]
+            xdata= self.netcdf_dict2[id]['location'][loc] - 1
             if self.startup:
-                fit_dat = self.netcdf_dict[id].variables['fit'].data[loc,:]
+                fit_dat = self.netcdf_dict2[id]['fit'][loc,:]
                 max_val = np.max(fit_dat)*1.2
                 min_val = -np.max(fit_dat)*0.1
-                #self.plot_dict['spec']['line1'].append(rel_axes[i].plot(self.netcdf_dict[id].variables['intensity'].data[loc,:],linestyle='-',color='b')[0])
-                self.plot_dict['spec']['line1'].append(rel_axes[i].plot(self.netcdf_dict[id].variables['intensity'].data[loc,:],'b.')[0])
+                #self.plot_dict['spec']['line1'].append(rel_axes[i].plot(self.netcdf_dict2[id]['intensity'][loc,:],linestyle='-',color='b')[0])
+                self.plot_dict['spec']['line1'].append(rel_axes[i].plot(self.netcdf_dict2[id]['intensity'][loc,:],'b.')[0])
                 self.plot_dict['spec']['line2'].append(rel_axes[i].plot(fit_dat,linestyle='--',color='k')[0])
                 self.plot_dict['spec']['vlines'].append(rel_axes[i].axvline(xdata))
                 rel_axes[i].set_title(id)
                 rel_axes[i].set_ylim([min_val,max_val])
             else:
-                self.plot_dict['spec']['line1'][i].set_ydata(self.netcdf_dict[id].variables['intensity'].data[loc,:])
-                self.plot_dict['spec']['line2'][i].set_ydata(self.netcdf_dict[id].variables['fit'].data[loc,:])
+                self.plot_dict['spec']['line1'][i].set_ydata(self.netcdf_dict2[id]['intensity'][loc,:])
+                self.plot_dict['spec']['line2'][i].set_ydata(self.netcdf_dict2[id]['fit'][loc,:])
                 self.plot_dict['spec']['vlines'][i].set_xdata([xdata,xdata])
                 rel_axes[i].draw_artist(rel_axes[i].patch)
                 rel_axes[i].draw_artist(self.plot_dict['spec']['vlines'][i])
@@ -673,9 +799,9 @@ class gui():
         if self.startup:
             self.plot_dict['resid_dot']['dots'] = []
         for i,id in enumerate(self.plot_channels):
-            loc = np.argmin(np.abs(self.netcdf_dict[id].variables['time'].data - self.x_val))
-            print self.x_val, loc, self.netcdf_dict[id].variables['intensity'].data.shape
-            data = self.netcdf_dict[id].variables['intensity'].data[loc,:] - self.netcdf_dict[id].variables['fit'].data[loc,:]
+            loc = np.argmin(np.abs(self.netcdf_dict2[id]['time'] - self.x_val))
+            print self.x_val, loc, self.netcdf_dict2[id]['intensity'].shape
+            data = self.netcdf_dict2[id]['intensity'][loc,:] - self.netcdf_dict2[id]['fit'][loc,:]
             if self.startup:
                 self.plot_dict['resid_dot']['dots'].append(rel_axes[i].plot(data,'.')[0])
                 rel_axes[i].set_ylim([-10,10])
@@ -703,6 +829,7 @@ class gui():
                 self.plot_dict['temp']['axes'][0].set_xlim([cur_xlim[0]-xlim_range*0.9,cur_xlim[1]-xlim_range*0.9])
             self.f.canvas.draw()
             for i in self.profile_axes: i.set_xlim([cur_xlim[0]-xlim_range*0.9,cur_xlim[1]-xlim_range*0.9])
+        self.plot_profiles()
 
 def onclick(event):
     print 'button',event.button
