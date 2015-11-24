@@ -26,6 +26,8 @@ def fida_plot_grid(directory, id_name, RMIDOUT = 2.253, RMIDIN=1.1043):
     #circle2=pt.Circle((RMIDIN*100,RMIDIN*100),.5,color='b',fill=False)
     yrange = [np.min(inputs.variables['y_grid'].data[0,:,0]), np.max(inputs.variables['y_grid'].data[0,:,0])]
     xrange = [np.min(inputs.variables['x_grid'].data[0,0,:]), np.max(inputs.variables['x_grid'].data[0,0,:])]
+    circle2=pt.Circle((RMIDOUT*100,RMIDOUT*100),.5,color='b',fill=False)
+    circle2=pt.Circle((RMIDIN*100,RMIDIN*100),.5,color='b',fill=False)
     for i, (x1,y1, x2, y2) in enumerate(zip(inputs.variables['xlos'].data, inputs.variables['ylos'].data, inputs.variables['xlens'].data, inputs.variables['ylens'].data)):
         poly_vals = np.polyfit([x1,x2],[y1,y2],1)
         poly_vals = np.polyfit([y1,y2],[x1,x2],1)
