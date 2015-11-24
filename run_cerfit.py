@@ -13,14 +13,6 @@ bash-3.2$
 * Set the shot, onbeam, tangential or verticals
 * Then run this script
 
-#Need this because pygtk is too old in the anaconda installation at the moment.
-
-
-bash-3.2$ export PATH="/f/python/linux64/bin":${PATH}
-bash-3.2$ /f/python/linux64/bin/Python widget.py 162810
-
-
-
 -----------------------------------
 Chords and beams being fit
 -----------------------------------
@@ -113,10 +105,13 @@ import CER_chords
 shot = 160409
 shot = 160414
 shot = 162810
+
+shot = 163240
 cerfit_dir =  '/u/haskeysr/cerfit/{}/'.format(shot)
 cur_dir = os.getcwd()
-on_beams = ['30lt', '330lt']
-on_beams = ['330lt', '330rt']
+#on_beams = ['30lt', '330lt']
+#on_beams = ['330lt', '330rt']
+on_beams = ['330lt', '330rt','30lt']
 #exclude_systems = ['U1', 'U2']
 exclude_systems = []
 
@@ -482,7 +477,6 @@ def read_references():
     return tssub_refs
 os.chdir(cerfit_dir)
 tssub_refs = read_references()
-
 exclude_list = read_remove_list()
 #exclude_list = ['t14','t15','t16','v14','v16','v17','v18']
 #Need an exclude list along with the times that they should be excluded to be as general as possible
@@ -547,6 +541,7 @@ else:
             chords.extend(chords_tmp)
             tssubs.extend(tssubs_tmp)
             beams.extend(beams_tmp)
+
 
 npeaks =  read_in_npeaks(chords)
 rerun_whole_shot = {i:False for i in chords}

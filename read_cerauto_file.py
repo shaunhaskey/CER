@@ -3,12 +3,15 @@ import cer_funcs as CER
 import os
 import matplotlib.pyplot as pt
 import numpy as np
-shot = 160414
+import sys
+shot_start = int(sys.argv[1])
+shot_end = int(sys.argv[2])
+#shot = 160414
 
 print ''
 shot_imp = []
 #for shot in range(160403,160423):
-for shot in range(160818,160840):
+for shot in range(shot_start,shot_end+1):
     shot_data = CER.read_shot_status(shot)
     for tmp_shot in [shot]:#shot_data.keys():
         print '#### {} ####'.format(tmp_shot)

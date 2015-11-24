@@ -49,12 +49,16 @@ def read_shot_status(shot):
     del shot_data[shot]['lines']#b.remove('lines')
     return shot_data[shot]
 
-def read_subtract_file(fname):
+def read_subtract_file(fname, tssub=False):
+    '''If tssub is true then it expects a tssub file else a time file
+    
+    '''
     with file(fname,'r') as filehandle: in_lines = filehandle.readlines()
     data = []
+    txt = 'ts=' if tssub else 'time='
     for i in range(len(in_lines)):
         cur_line = in_lines[i]
-        if cur_line.find('time')==0:
+        if cur_line.find(txt)==0:
             cur_line_plus = in_lines[i+1]
             data.append([cur_line.split('=')[-1].rstrip('\n'), cur_line_plus.split('=')[-1].rstrip('\n')])
     return data

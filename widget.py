@@ -1,4 +1,9 @@
 '''
+#Need this because pygtk is too old in the anaconda installation at the moment.
+
+bash-3.2$ export PATH="/f/python/linux64/bin":${PATH}
+bash-3.2$ /f/python/linux64/bin/Python widget.py 162810
+
 Todo list:
 -> Run CERFIT from within this widget for minor changes like modifying the time subtraction slice
 -> Plot the profiles as a function of time, and allow stepping through this data
